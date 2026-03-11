@@ -22,7 +22,7 @@
 module tb_top
     #(parameter INSTR_RDATA_WIDTH = 32,
       parameter RAM_ADDR_WIDTH    = 22,
-      parameter BOOT_ADDR         = 'h2000 // must be 256-byte aligned (cannot be 'h80)
+      parameter BOOT_ADDR         = 'h4000 // must be 256-byte aligned; raised from 'h2000 to satisfy .align 14 in I-jal test
      );
 
     const int CLK_PHASE_HI        = 5;
