@@ -20,7 +20,7 @@ module cv32e20_tb_wrapper
     #(parameter // Parameters used by TB
                 INSTR_RDATA_WIDTH = 32,
                 RAM_ADDR_WIDTH    = 20,
-                BOOT_ADDR         = 'h80,
+                BOOT_ADDR         = 32'h4000,
                 DM_HALTADDRESS    = 32'h1A11_0800,
                 HART_ID           = 32'h0000_0000,
                 // Parameters used by DUT
