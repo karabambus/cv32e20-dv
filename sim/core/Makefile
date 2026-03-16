@@ -280,21 +280,21 @@ clean_all: clean-all-banner clean-all-targets
 
 ###############################################################################
 # certification test-program directories (prebuilt elf file copy-pasted from act4)
-certification_PROGRAM_PATH    = $(CV32E20_DV)/external/act4/work/cv32e20/elfs
+certification_PROGRAM_PATH    = $(ACT4_PKG)/work/cv32e20/elfs
 certification_PROGRAM_RELPATH = ../../external/act4/work/cv32e20/elfs
 
 ###############################################################################
 # certification test target (run ALL ELFs under compliance/rv32, quiet + summary)
 .PHONY: gen
-gen: 
+gen: $(ACT4_PKG)
 	@echo "* Cleaning ACT4.0 directory..."
-	@$(MAKE) -C ../../external/act4/ clean
+	@$(MAKE) -C $(ACT4_PKG) clean
 	@echo "* Generating ACT4.0 tests..."
-	@$(MAKE) -C ../../external/act4/ \
+	@$(MAKE) -C $(ACT4_PKG) \
 		EXTENSIONS=I,M,C,Zca,Zicsr,Zifencei \
 		CV_SW_MARCH=rv32imc_zicsr_zifencei \
 		CONFIG_FILES=config/cores/cve2/cv32e20/test_config.yaml
-	@echo "* Tests generated in: $(certification_PROGRAM_RELPATH) "
+	@echo "* Tests generated in: $(certification_PROGRAM_PATH)"
 
 .PHONY: certify
 certify: TEST = certification

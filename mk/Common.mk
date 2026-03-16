@@ -194,6 +194,21 @@ endif
 # CORE-V-VERIF repo var end
 
 ###############################################################################
+# Generate command to clone RISC-V Architectural Certification Tests (ACT4)
+ifeq ($(ACT4_BRANCH), master)
+  TMP10 = git clone $(ACT4_REPO) $(ACT4_PKG)
+else
+  TMP10 = git clone -b $(ACT4_BRANCH) --single-branch $(ACT4_REPO) $(ACT4_PKG)
+endif
+
+ifeq ($(ACT4_HASH), head)
+  CLONE_ACT4_CMD = $(TMP10)
+else
+  CLONE_ACT4_CMD = $(TMP10); cd $(ACT4_PKG); git checkout $(ACT4_HASH)
+endif
+# ACT4 repo var end
+
+###############################################################################
 # Run the yaml2make scripts
 
 ifeq ($(VERBOSE),1)
@@ -800,6 +815,16 @@ $(SVLIB_PKG):
 	@echo "Building $(SVLIB_PKG)"
 	@echo "$(BANNER)"
 	$(SVLIB_CXX) $(SVLIB_CFLAGS) $(SVLIB_SRC) -I$(DPI_INCLUDE) -o $(SVLIB_LIB)
+
+###############################################################################
+# Clone ACT4
+export ACT4_PKG  = $(CV32E20_DV)/external/act4
+
+clone_act4: $(ACT4_PKG)
+
+$(ACT4_PKG):
+	$(CLONE_ACT4_CMD)
+	sed -i 's/\. = 0x00004000;/. = 0x00002000;/' $(ACT4_PKG)/config/cores/cve2/cv32e20/link.ld
 
 ###############################################################################
 # Build Stub for RVVI-API (in the case where ImperasDV is not available)
