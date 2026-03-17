@@ -47,10 +47,10 @@ fetched on demand via a Make target — it is **not** a git submodule.
   export CV_SW_PREFIX=riscv64-unknown-elf-
   ```
 - **Sail RISC-V reference model v0.10** (`sail_riscv_sim` on `$PATH`): required version is 0.10.
-  Install the pre-built binary:
-  ```
-  curl --location https://github.com/riscv/sail-riscv/releases/download/0.10/sail_riscv_sim-$(uname)-$(arch).tar.gz | sudo tar xvz --directory=/usr/local --strip-components=1
-  ```
+  Download the pre-built binary from https://github.com/riscv/sail-riscv/releases/tag/0.10,
+  extract to a directory of your choice (e.g. `~/.local/bin` or `/usr/local/bin`), and ensure
+  that directory is on your `$PATH` (add `export PATH="$HOME/.local/bin:$PATH"` to `~/.bashrc`
+  if needed).
 - **Python uv** package manager: https://docs.astral.sh/uv/getting-started/installation/
 - **Verilator** v5.042 or later.
 
