@@ -39,7 +39,7 @@ stdout.txt
 riviera_results/
 */vendor_lib/dpi_dasm_spike/
 */vendor_lib/verilab/svlib/
-external/act4/
+*/vendor_lib/riscv-arch-test/act4
 work*
 vsim.dbg
 *.wlf

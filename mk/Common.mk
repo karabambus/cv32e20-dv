@@ -818,13 +818,12 @@ $(SVLIB_PKG):
 
 ###############################################################################
 # Clone ACT4
-export ACT4_PKG  = $(CV32E20_DV)/external/act4
+export ACT4_PKG  = $(CV32E20_DV)/vendor_lib/riscv-arch-test/act4
 
 clone_act4: $(ACT4_PKG)
 
 $(ACT4_PKG):
 	$(CLONE_ACT4_CMD)
-	sed -i 's/\. = 0x00004000;/. = 0x00002000;/' $(ACT4_PKG)/config/cores/cve2/cv32e20/link.ld
 
 ###############################################################################
 # Build Stub for RVVI-API (in the case where ImperasDV is not available)
