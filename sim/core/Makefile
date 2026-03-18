@@ -59,8 +59,8 @@ CV_CORE_UC     = $(shell echo $(CV_CORE) | tr a-z A-Z)
 #TODO(Ateeb): Temporary, remove next 4 lines after debug
 CV_SW_TOOLCHAIN      ?= /opt/riscv
 CV_SW_PREFIX         ?= "riscv64-unknown-elf-"
-CV_SW_MARCH			 ?= rv32imc_zicsr_zifencei
-CV_SW_CC		 	 ?= gcc
+CV_SW_MARCH          ?= rv32imc_zicsr_zifencei
+CV_SW_CC             ?= gcc
 
 SIMULATOR     ?= $(CV_SIMULATOR)
 ifneq (${SIMULATOR}, verilator)
@@ -107,6 +107,7 @@ VERILATOR           = verilator
 VERI_FLAGS         +=
 VERI_WAIVERS       += -Wno-COMBDLY -Wno-MULTIDRIVEN -Wno-BLKANDNBLK -Wno-lint --Wno-UNOPTFLAT -Wno-MODDUP # hope this doesn't hurt us in the long run
 VERI_COMPILE_FLAGS += $(VERI_WAIVERS) $(SV_CMP_FLAGS)
+#VERI_RUN_FLAGS      = +verilator+rand+reset+1
 VERI_TRACE         ?=
 VERI_OBJ_DIR       ?= cobj_dir
 #VERI_LOG_DIR       ?= cobj_dir/logs
@@ -198,7 +199,7 @@ ifneq (${WAVE}, 0)
 endif
 ifneq (${WAVES}, 0)
   VERI_TRACE      = --trace-fst
-  VERI_RUN_FLAGS  = +waves
+  VERI_RUN_FLAGS += +waves
   VERI_WAVE_CMD   = +wave_file=$(SIM_RUN_RESULTS)/$(WAVE_FILE)
 endif
 
@@ -206,9 +207,9 @@ verilate: CV_CORE_pkg $(TBSRC_VERI) $(TBSRC_PKG)
 	@echo "$(BANNER)"
 	@echo "* Compiling CORE TB and CV32E20 with Verilator"
 	@echo "$(BANNER)"
-	$(VERILATOR) --binary --cc --sv --exe \
+	$(VERILATOR) --main --binary --cc --sv --exe --build \
 		$(VERI_TRACE) \
-	        --top-module tb_top \
+		--top-module tb_top \
 		$(TBSRC_VERI) \
 		-f $(CV_CORE_MANIFEST) \
 		--Mdir $(VERI_OBJ_DIR) \
