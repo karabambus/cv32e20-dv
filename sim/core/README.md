@@ -34,6 +34,42 @@ make test TEST=illegal
 make test TEST=riscv_ebreak_test_0
 ```
 
+Running RISC-V Architectural Certification Tests (ACT4)
+-------------------------------------------------------
+CV32E20-DV supports the RISC-V Architectural Certification Tests (ACT4). The ACT4 repository is
+fetched on demand via a Make target — it is **not** a git submodule.
+
+### Prerequisites
+- **RISC-V GCC toolchain** (`riscv64-unknown-elf-gcc`): upstream GCC with RISC-V multi-lib support.
+  See `../TOOLCHAIN.md`. Set `CV_SW_TOOLCHAIN` and `CV_SW_PREFIX` in your environment, e.g.:
+  ```
+  export CV_SW_TOOLCHAIN=/opt/riscv
+  export CV_SW_PREFIX=riscv64-unknown-elf-
+  ```
+- **Sail RISC-V reference model v0.10** (`sail_riscv_sim` on `$PATH`): required version is 0.10.
+  Download the pre-built binary from https://github.com/riscv/sail-riscv/releases/tag/0.10,
+  extract to a directory of your choice (e.g. `~/.local/bin` or `/usr/local/bin`), and ensure
+  that directory is on your `$PATH` (add `export PATH="$HOME/.local/bin:$PATH"` to `~/.bashrc`
+  if needed).
+- **Python uv** package manager: https://docs.astral.sh/uv/getting-started/installation/
+- **Verilator** v5.042 or later.
+
+### Steps
+
+ACT4 is fetched automatically when you first run `make gen` or `make gen-certify`.
+Run the full certification flow:
+```
+make gen-certify
+```
+Or separately:
+```
+make gen       # clone ACT4 (if needed) + generate ELFs via Sail reference model
+make certify   # run ELFs through Verilator DUT
+```
+
+Results are written to:
+`simulation_results/certification/test_program/bsp/certification_summary.txt`
+
 <!--
 Running the testbench with Metrics [dsim](https://metrics.ca)
 ----------------------
