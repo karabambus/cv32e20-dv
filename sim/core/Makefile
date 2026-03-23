@@ -170,6 +170,8 @@ check:
 	@echo "CFG_FLAGS created by $(CFGYAML2MAKE):"
 	@cat $(CFG_FLAGS_MAKE)
 	@echo "CLONE_CV_CORE_CMD = $(CLONE_CV_CORE_CMD)"
+	@echo "CERT_PROFILE     = $(CERT_PROFILE)"
+	@echo "CERT_RESULTS_DIR = $(CERT_RESULTS_DIR)"
 
 # Shorthand rules for convience
 CV_CORE_pkg: clone_rtl
@@ -285,20 +287,38 @@ certification_PROGRAM_PATH    = $(ACT4_PKG)/work/cv32e20/elfs
 certification_PROGRAM_RELPATH = ../../vendor_lib/riscv-arch-test/act4/work/cv32e20/elfs
 
 ###############################################################################
+# Certification profile: selects the extension set passed to ACT4.
+# The full profile universe is intersected with the core's UDB YAML at gen-time
+# so only extensions the core actually implements are tested.
+# Supported: rvi20. Future: mc100, ...
+CERT_PROFILE ?= rvi20
+
+ifeq ($(CERT_PROFILE),rvi20)
+  _PROFILE_EXTS = I,M,A,C,F,D,Zaamo,Zalrsc,Zca,Zcb,Zcf,Zcd,Zicntr,Zicsr,Zifencei,Zihpm
+else
+  $(error Unknown CERT_PROFILE=$(CERT_PROFILE). Supported: rvi20)
+endif
+
+_UDB_YAML = $(ACT4_PKG)/config/cores/cve2/cv32e20/cv32e20.yaml
+CERT_RESULTS_DIR = certification_$(CERT_PROFILE)
+
+###############################################################################
 # certification test target (run ALL ELFs under compliance/rv32, quiet + summary)
 .PHONY: gen
 gen: $(ACT4_PKG)
 	@command -v uv >/dev/null 2>&1 || { echo "Error: 'uv' not found. Install from https://docs.astral.sh/uv/getting-started/installation/"; exit 1; }
 	@echo "* Cleaning ACT4.0 directory..."
 	@$(MAKE) -C $(ACT4_PKG) clean
-	@echo "* Generating ACT4.0 tests..."
-	@$(MAKE) -C $(ACT4_PKG) \
-		EXTENSIONS=I,M,C,Zca,Zicsr,Zifencei \
+	@echo "* Computing extensions ($(CERT_PROFILE) profile intersected with core UDB)..."
+	@CERT_EXTS=$$(python3 -c "import yaml,sys; p=\"$(_PROFILE_EXTS)\".split(\",\"); c=set(e[\"name\"] for e in yaml.safe_load(open(\"$(_UDB_YAML)\"))[\"implemented_extensions\"]); s=[x for x in p if x not in c]; s and print(\"  NOTE: skipping (not in UDB): \"+\",\".join(s),file=sys.stderr); print(\",\".join(x for x in p if x in c))") && \
+	echo "* Generating ACT4.0 tests for extensions: $$CERT_EXTS" && \
+	$(MAKE) -C $(ACT4_PKG) \
+		EXTENSIONS=$$CERT_EXTS \
 		CONFIG_FILES=config/cores/cve2/cv32e20/test_config.yaml
 	@echo "* Tests generated in: $(certification_PROGRAM_PATH)"
 
 .PHONY: certify
-certify: TEST = certification
+certify: TEST = $(CERT_RESULTS_DIR)
 certify: verilate
 	@echo "$(BANNER)"
 	@echo "* Running ALL compliance ELFs with Verilator"
