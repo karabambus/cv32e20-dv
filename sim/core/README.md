@@ -6,7 +6,11 @@ The testbench itself is located at `../../tb/core` and the test-programs are at
 
 Supported SystemVerilog Simulators
 ----------------------------------
-To run the core testbench you will need Verilator, version v5.042 or later and RISC-V GCC compiler.
+The core testbench supports two simulators:
+- **Verilator** v5.042 or later — used for the standard `sanity`, `test`, and `certify` flows.
+- **Questa** (Siemens Questa Altera FSE or full) — used for the `certify-vsim` cross-check flow,
+  to validate results on a 4-state simulator.
+
 Support for additional SystemVerilog simulators will be added on an as-needed basis.
 If you would like to contribute an update to support your favorite simulator, please see CONTRIBUTING.
 
@@ -54,21 +58,86 @@ fetched on demand via a Make target — it is **not** a git submodule.
 - **Python uv** package manager: https://docs.astral.sh/uv/getting-started/installation/
 - **Verilator** v5.042 or later.
 
-### Steps
+### Certification Profile
+
+The `CERT_PROFILE` variable selects which extension set is passed to ACT4 for test generation.
+The actual tested extensions are computed at gen-time by intersecting the profile's full extension
+universe with the extensions implemented in the core's UDB YAML — unimplemented extensions are
+automatically skipped.
+
+Currently supported profiles:
+
+| `CERT_PROFILE` | Description |
+|---|---|
+| `rvi20` (default) | RVI20U32 unprivileged profile |
+
+### Verilator Certification Flow
 
 ACT4 is fetched automatically when you first run `make gen` or `make gen-certify`.
 Run the full certification flow:
 ```
-make gen-certify
+make gen-certify [CERT_PROFILE=rvi20]
 ```
 Or separately:
 ```
 make gen       # clone ACT4 (if needed) + generate ELFs via Sail reference model
-make certify   # run ELFs through Verilator DUT
+make certify   # compile with Verilator and run all ELFs through the DUT
+```
+
+To run only a specific extension:
+```
+make certify FILTER=Zicsr
+```
+
+To generate waveforms (FST) for debugging:
+```
+make certify WAVES=1 FILTER=Zicsr
+gtkwave cv32e20.fst
 ```
 
 Results are written to:
-`simulation_results/certification/test_program/bsp/certification_summary.txt`
+`simulation_results/certification_<CERT_PROFILE>/logs/certification_summary.txt`
+
+For example, for the default rvi20:
+`simulation_results/certification_rvi20/logs/certification_summary.txt`
+
+Running ACT4 Certification Tests with Questa (vsim)
+----------------------------------------------------
+Questa provides an independent cross-check for Verilator results on a 4-state simulator.
+
+### Questa Prerequisites
+- **Questa** (Altera FSE or full edition): `vsim`, `vlog`, `vopt` must be on `$PATH`,
+  or override `VSIM`, `VLOG`, `VOPT` variables in the make invocation.
+
+### Questa Certification Flow
+
+Run the full certification flow (gen + compile + run):
+```
+make gen-certify-vsim [CERT_PROFILE=rvi20]
+```
+
+Or separately:
+```
+make gen              # generate ELFs (shared with Verilator flow)
+make questa-compile   # compile RTL and testbench once
+make certify-vsim     # run all ELFs through the Questa DUT
+```
+
+To run only a specific extension:
+```
+make certify-vsim FILTER=Zicsr
+```
+
+Results are written to:
+`simulation_results/questa_<CERT_PROFILE>/logs/certification_summary.txt`
+
+For example, for rvi20:
+`simulation_results/questa_rvi20/logs/certification_summary.txt`
+
+The maximum cycle limit per test defaults to 2,000,000 and can be overridden:
+```
+make certify-vsim VSIM_MAX_CYCLES=5000000
+```
 
 <!--
 Running the testbench with Metrics [dsim](https://metrics.ca)
