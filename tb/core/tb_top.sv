@@ -88,14 +88,17 @@ module tb_top
     // timing format, reset generation and parameter check
     initial begin
         $timeformat(-9, 0, "ns", 9);
+        // Start high so Verilator (2-state, all signals init to 0) sees a
+        // real 1->0 negedge; without this the async reset never fires.
+        core_rst_n   = 1'b1;
+        fetch_enable = 1'b0;
+        #1;
         core_rst_n   = 1'b0; // assert reset
-        fetch_enable = 1'b0; // deassert fetch-enable (for now)
 
         // hold in reset for a few cycles
         repeat (RESET_ASSERT_CYCLES) @(posedge core_clk);
         // start running
         #CLK2NRESET_DELAY core_rst_n = 1'b1;
-        core_rst_n = 1'b1;
         if($test$plusargs("verbose")) begin
             $display("[%s] @ t=%0t: reset deasserted", id, $time);
         end
