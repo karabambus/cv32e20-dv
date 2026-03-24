@@ -41,6 +41,50 @@ def parse_core(path):
         data = yaml.safe_load(f)
     return {e["name"] for e in data.get("implemented_extensions", [])}
 
+def get_required_extensions(ext_name, ext_dir):
+    """Read unconditional requirements from an extension's UDB YAML.
+
+    Handles two requirement patterns from spec/std/isa/ext/:
+    - simple:  requirements: {extension: {name: X}}
+    - allOf:   requirements: {extension: {allOf: [{name: X}, {name: Y}]}}
+    Skips complex conditional patterns (anyOf/oneOf/not) — ACT4 handles those.
+    """
+    path = os.path.join(ext_dir, f"{ext_name}.yaml")
+    if not os.path.isfile(path):
+        return set()
+    with open(path) as f:
+        data = yaml.safe_load(f)
+    reqs = data.get("requirements")
+    if reqs is None:
+        # some extensions have requirements inside versions[0]
+        versions = data.get("versions", [])
+        if versions:
+            reqs = versions[0].get("requirements")
+    if not reqs:
+        return set()
+    deps = set()
+    ext_req = reqs.get("extension", reqs)
+    if isinstance(ext_req, dict):
+        if "name" in ext_req:
+            deps.add(ext_req["name"])
+        elif "allOf" in ext_req:
+            for item in ext_req["allOf"]:
+                if isinstance(item, dict) and "name" in item:
+                    deps.add(item["name"])
+    return deps
+
+def resolve_dependencies(exts, ext_dir):
+    """Transitively resolve unconditional extension dependencies from UDB."""
+    resolved = set(exts)
+    queue = list(exts)
+    while queue:
+        ext = queue.pop()
+        for dep in get_required_extensions(ext, ext_dir):
+            if dep not in resolved:
+                resolved.add(dep)
+                queue.append(dep)
+    return resolved
+
 def sort_extensions(exts):
     single = sorted(e for e in exts if len(e) == 1)
     multi = sorted(e for e in exts if len(e) > 1)
@@ -78,11 +122,17 @@ def main():
     mandatory, optional = parse_profile(prof_path)
     core_exts = parse_core(args.core_yaml)
 
+    # resolve unconditional dependencies from UDB extension YAMLs
+    # e.g. Zicntr requires Zicsr, F requires Zicsr, D requires F
+    ext_dir = os.path.join(args.udb_root, "spec", "std", "isa", "ext")
+    all_profile = resolve_dependencies(mandatory | optional, ext_dir)
+    # deps not in original profile are added as optional
+    optional |= all_profile - mandatory - optional
+
     # check mandatory requirements against core
     mand_present = mandatory & core_exts
     mand_missing = mandatory - core_exts
 
-    all_profile = mandatory | optional # for what extensions ACT4 generetes test (full profile) 
     will_test = all_profile & core_exts # what extensions will act4 test
     will_skip = all_profile - core_exts # what extensions will act4 not test (from full profile scope)
 
