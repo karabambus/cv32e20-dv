@@ -288,34 +288,28 @@ certification_PROGRAM_RELPATH = ../../vendor_lib/riscv-arch-test/act4/work/cv32e
 
 ###############################################################################
 # Certification profile: selects the extension set passed to ACT4.
-# The full profile universe is intersected with the core's UDB YAML at gen-time
-# so only extensions the core actually implements are tested.
-# Supported: rvi20. Future: mc100, ...
-CERT_PROFILE ?= rvi20
-
-ifeq ($(CERT_PROFILE),rvi20)
-  _PROFILE_EXTS = I,M,A,C,F,D,Zaamo,Zalrsc,Zca,Zcb,Zcf,Zcd,Zicntr,Zicsr,Zifencei,Zihpm
-else
-  $(error Unknown CERT_PROFILE=$(CERT_PROFILE). Supported: rvi20)
-endif
-
-_UDB_YAML = $(ACT4_PKG)/config/cores/cve2/cv32e20/cv32e20.yaml
-CERT_RESULTS_DIR = certification_$(CERT_PROFILE)
+# Profile definitions are read from the UDB auto-generated cfgs/profile/ YAMLs.
+# Mandatory extensions are checked against the core before proceeding.
+# ACT4 handles filtering tests to what the core actually implements.
+# Supported profiles are listed in bin/lib/select_extensions.py
+CERT_PROFILE     ?= rvi20
+UDB_ROOT         ?= $(ACT4_PKG)/external/riscv-unified-db
+_CORE_UDB_YAML    = $(ACT4_PKG)/config/cores/cve2/cv32e20/cv32e20.yaml
+_SELECT_EXTS      = $(CV32E20_DV)/bin/lib/select_extensions.py
+CERT_RESULTS_DIR  = certification_$(CERT_PROFILE)
 
 ###############################################################################
 # certification test target (run ALL ELFs under compliance/rv32, quiet + summary)
 .PHONY: gen
 gen: $(ACT4_PKG)
-	@command -v uv >/dev/null 2>&1 || { echo "Error: 'uv' not found. Install from https://docs.astral.sh/uv/getting-started/installation/"; exit 1; }
-	@echo "* Cleaning ACT4.0 directory..."
-	@$(MAKE) -C $(ACT4_PKG) clean
-	@echo "* Computing extensions ($(CERT_PROFILE) profile intersected with core UDB)..."
-	@CERT_EXTS=$$(python3 -c "import yaml,sys; p=\"$(_PROFILE_EXTS)\".split(\",\"); c=set(e[\"name\"] for e in yaml.safe_load(open(\"$(_UDB_YAML)\"))[\"implemented_extensions\"]); s=[x for x in p if x not in c]; s and print(\"  NOTE: skipping (not in UDB): \"+\",\".join(s),file=sys.stderr); print(\",\".join(x for x in p if x in c))") && \
-	echo "* Generating ACT4.0 tests for extensions: $$CERT_EXTS" && \
-	$(MAKE) -C $(ACT4_PKG) \
-		EXTENSIONS=$$CERT_EXTS \
-		CONFIG_FILES=config/cores/cve2/cv32e20/test_config.yaml
-	@echo "* Tests generated in: $(certification_PROGRAM_PATH)"
+	@CERT_EXTS=$$(python3 $(_SELECT_EXTS) \
+	    --profile $(CERT_PROFILE) \
+	    --core-yaml $(_CORE_UDB_YAML) \
+	    --udb-root $(UDB_ROOT)) && \
+	 echo "* Running ACT4.0 gen with profile '$(CERT_PROFILE)' extensions: $$CERT_EXTS" && \
+	 $(MAKE) -C $(ACT4_PKG) \
+	    EXTENSIONS=$$CERT_EXTS \
+	    CONFIG_FILES=config/cores/cve2/cv32e20/test_config.yaml
 
 .PHONY: certify
 certify: TEST = $(CERT_RESULTS_DIR)
