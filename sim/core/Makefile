@@ -306,6 +306,7 @@ CERT_RESULTS_DIR = certification$(if $(CERT_PROFILE),_$(CERT_PROFILE))
 # certification test target (run ALL ELFs under compliance/rv32, quiet + summary)
 .PHONY: gen
 gen: $(ACT4_PKG)
+	@command -v uv >/dev/null 2>&1 || { echo "Error: 'uv' not found. Install from https://docs.astral.sh/uv/getting-started/installation/"; exit 1; }
 	@$(MAKE) -C $(ACT4_PKG) clean
 	@echo "* Running ACT4.0 gen$(if $(CERT_PROFILE), with profile '$(CERT_PROFILE)' extensions: $(_CERT_EXTS))"
 	@$(MAKE) -C $(ACT4_PKG) \
