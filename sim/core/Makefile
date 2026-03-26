@@ -287,28 +287,29 @@ certification_PROGRAM_PATH    = $(ACT4_PKG)/work/cv32e20/elfs
 certification_PROGRAM_RELPATH = ../../vendor_lib/riscv-arch-test/act4/work/cv32e20/elfs
 
 ###############################################################################
-# Certification profile: selects the extension set passed to ACT4.
-# Profile definitions are read from the UDB auto-generated cfgs/profile/ YAMLs.
-# Mandatory extensions are checked against the core before proceeding.
-# ACT4 handles filtering tests to what the core actually implements.
-# Supported profiles are listed in bin/lib/select_extensions.py
-CERT_PROFILE     ?= rvi20
-UDB_ROOT         ?= $(ACT4_PKG)/external/riscv-unified-db
-_CORE_UDB_YAML    = $(ACT4_PKG)/config/cores/cve2/cv32e20/cv32e20.yaml
-_SELECT_EXTS      = $(CV32E20_DV)/bin/lib/select_extensions.py
-CERT_RESULTS_DIR  = certification_$(CERT_PROFILE)
+# Certification profile: scopes which extension testplans ACT4 processes.
+# ACT4's select_tests() further filters by the core's implemented_extensions.
+# Without CERT_PROFILE, ACT4 runs the full config (no EXTENSIONS= filter).
+# Supported profiles: rvi20
+CERT_PROFILE ?=
+
+ifeq ($(CERT_PROFILE),rvi20)
+  # RVI20U32 profile — mandatory: I; optional: A,C,D,F,M,Zca,Zcd,Zcf,Zicntr,Zicsr,Zifencei,Zihpm
+  _CERT_EXTS = I,M,A,C,D,F,Zca,Zcd,Zcf,Zicntr,Zicsr,Zifencei,Zihpm
+else ifneq ($(CERT_PROFILE),)
+  $(error Unknown CERT_PROFILE=$(CERT_PROFILE). Supported: rvi20)
+endif
+
+CERT_RESULTS_DIR = certification$(if $(CERT_PROFILE),_$(CERT_PROFILE))
 
 ###############################################################################
 # certification test target (run ALL ELFs under compliance/rv32, quiet + summary)
 .PHONY: gen
 gen: $(ACT4_PKG)
-	@CERT_EXTS=$$(python3 $(_SELECT_EXTS) \
-	    --profile $(CERT_PROFILE) \
-	    --core-yaml $(_CORE_UDB_YAML) \
-	    --udb-root $(UDB_ROOT)) && \
-	 echo "* Running ACT4.0 gen with profile '$(CERT_PROFILE)' extensions: $$CERT_EXTS" && \
-	 $(MAKE) -C $(ACT4_PKG) \
-	    EXTENSIONS=$$CERT_EXTS \
+	@$(MAKE) -C $(ACT4_PKG) clean
+	@echo "* Running ACT4.0 gen$(if $(CERT_PROFILE), with profile '$(CERT_PROFILE)' extensions: $(_CERT_EXTS))"
+	@$(MAKE) -C $(ACT4_PKG) \
+	    $(if $(_CERT_EXTS),EXTENSIONS=$(_CERT_EXTS)) \
 	    CONFIG_FILES=config/cores/cve2/cv32e20/test_config.yaml
 
 .PHONY: certify
