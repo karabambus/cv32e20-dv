@@ -263,7 +263,7 @@ clean-test-programs:
 	find $(CV32E20_DV)/tests/programs -name "*.objdump" -exec rm {} \;
 	find $(CV32E20_DV)/tests/programs -name "corev_*.S" -exec rm {} \;
 
-clean-all-targets: clean-dist clean-cloned clean-sim-results clean-test-programs verilator-clean
+clean-all-targets: clean-dist clean-cloned clean-sim-results clean-test-programs verilator-clean questa-clean
 
 clean-dist:
 	rm -rf riscv-fesvr riscv-isa-sim
@@ -356,26 +356,28 @@ gen-certify: gen certify
 # Useful to cross-check Verilator results on a 4-state simulator.
 #
 # Usage:
-#   make questa-compile              # compile once
-#   make certify-vsim                # run all ELFs
-#   make certify-vsim FILTER=I       # run only I-extension ELFs
-#   make gen-certify-vsim            # gen + compile + run
-#   make questa-clean                # wipe work library
+#   make questa-compile                          # compile once
+#   make certify-vsim                            # run all ELFs
+#   make certify-vsim FILTER=I                   # run only I-extension ELFs
+#   make certify-vsim VSIM_MAX_CYCLES=5000000    # override cycle limit
+#   make gen-certify-vsim                        # gen + compile + run
+#   make questa-clean                            # wipe work library
 
-VSIM        ?= vsim
-VLOG        ?= vlog
-VOPT        ?= vopt
+VSIM          ?= vsim
+VLOG          ?= vlog
+VOPT          ?= vopt
+RISCV_OBJCOPY ?= riscv64-unknown-elf-objcopy
 
 VSIM_WORK_DIR    = $(SIM_RESULTS)/questa
 VSIM_LOG_DIR     = $(VSIM_WORK_DIR)/logs
 VSIM_OPT_TOP     = tb_top_opt
 
-# NOTE: with a full Questa license, remove +define+VERILATOR below and add a
-# separate vlog step for tb_riscv/riscv_random_interrupt_generator.sv (after
-# TBSRC_PKG, before TBSRC_VERI) — mm_ram.sv instantiates it under `ifndef VERILATOR.
-# With Questa FSE (Altera Starter), keep +define+VERILATOR: FSE lacks the
-# svverification license required for randcase/UVM stall features in mm_ram.sv.
+# NOTE: +define+VERILATOR suppresses the randcase/UVM stall features in mm_ram.sv
+# that require a full svverification license (unavailable with Questa FSE/Starter).
+# Remove this define if you have a full Questa license and add a separate vlog
+# step for tb_riscv/riscv_random_interrupt_generator.sv (after TBSRC_PKG, before TBSRC).
 VLOG_FLAGS  = -sv -work $(VSIM_WORK_DIR) \
+              +define+VERILATOR \
               -suppress 2583
 VOPT_FLAGS  = -work $(VSIM_WORK_DIR) \
               +acc -o $(VSIM_OPT_TOP)
@@ -396,15 +398,18 @@ questa-compile: CV_CORE_pkg
 	@echo "$(BANNER)"
 	@echo "* Compiling CORE TB and CV32E20 with Questa"
 	@echo "$(BANNER)"
-	mkdir -p $(VSIM_WORK_DIR)
+	rm -rf $(VSIM_WORK_DIR)
+	mkdir -p $(SIM_RESULTS)
+	vlib $(VSIM_WORK_DIR)
 	$(VLOG) $(VLOG_FLAGS) -f $(CV_CORE_MANIFEST)
 	$(VLOG) $(VLOG_FLAGS) $(TBSRC_PKG)
 	$(VLOG) $(VLOG_FLAGS) $(TBSRC_VERI)
 	$(VOPT) $(VOPT_FLAGS) tb_top
 
 .PHONY: certify-vsim
-certify-vsim:
-	@test -d "$(VSIM_WORK_DIR)/$(VSIM_OPT_TOP)" || { echo "Error: optimized design '$(VSIM_OPT_TOP)' not found. Run 'make questa-compile' first."; exit 1; }
+certify-vsim: TEST = certification
+certify-vsim: questa-compile
+	@test -f "$(VSIM_WORK_DIR)/_info" || { echo "Error: Questa work library not found under '$(VSIM_WORK_DIR)'. Run 'make questa-compile' first."; exit 1; }
 	@echo "$(BANNER)"
 	@echo "* Running ALL compliance ELFs with Questa"
 	@echo "$(BANNER)"
@@ -414,7 +419,7 @@ certify-vsim:
 	echo "RESULT  TEST" > "$$SUMMARY"; \
 	echo "------  ----" >> "$$SUMMARY"; \
 	ROOT="$(certification_PROGRAM_PATH)/rv32i$(if $(FILTER),/$(FILTER),)"; \
-	ELFS="$$(find -L "$$ROOT" -type f -a \( -iname '*.elf' -o -iname '*.elf32' \) 2>/dev/null | sort)"; \
+	ELFS="$$(find -L "$$ROOT" \( -type f -o -type l \) -a \( -iname '*.elf' -o -iname '*.elf32' \) 2>/dev/null | sort)"; \
 	if [ -z "$$ELFS" ]; then \
 	  echo "No .elf files found under $$ROOT"; \
 	  echo "Debug listing (2 levels):"; \
@@ -430,7 +435,7 @@ certify-vsim:
 	  LOG="$(VSIM_LOG_DIR)/$${REL%.*}.log"; \
 	  mkdir -p "$$(dirname "$$LOG")"; \
 	  if [ ! -f "$$HEX" ] || [ "$$ELF" -nt "$$HEX" ]; then \
-	    riscv64-unknown-elf-objcopy -O verilog "$$ELF" "$$HEX"; \
+	    $(RISCV_OBJCOPY) -O verilog "$$ELF" "$$HEX"; \
 	  fi; \
 	  set +e; \
 	  $(VSIM) $(VSIM_FLAGS) \
@@ -457,4 +462,4 @@ questa-clean:
 	rm -rf $(VSIM_WORK_DIR)
 
 .PHONY: gen-certify-vsim
-gen-certify-vsim: gen questa-compile certify-vsim
+gen-certify-vsim: gen certify-vsim
