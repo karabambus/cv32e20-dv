@@ -374,16 +374,13 @@ VSIM_OPT_TOP     = tb_top_opt
 
 # NOTE: +define+VERILATOR suppresses the randcase/UVM stall features in mm_ram.sv
 # that require a full svverification license (unavailable with Questa FSE/Starter).
-# Remove this define if you have a full Questa license and add a separate vlog
+# Add this define if you have a full Questa license and remove a separate vlog
 # step for tb_riscv/riscv_random_interrupt_generator.sv (after TBSRC_PKG, before TBSRC).
 VLOG_FLAGS  = -sv -work $(VSIM_WORK_DIR) \
-              +define+VERILATOR \
               -suppress 2583
 VOPT_FLAGS  = -work $(VSIM_WORK_DIR) \
               +acc -o $(VSIM_OPT_TOP)
 VSIM_MAX_CYCLES ?= 2000000
-# -suppress 8386: known noisy warning from tb elaboration
-# -suppress 3009: known noisy warning from tb elaboration
 VSIM_FLAGS  = -work $(VSIM_WORK_DIR) \
               -batch -quiet \
               -sv_seed 0 \
@@ -396,13 +393,15 @@ VSIM_FLAGS  = -work $(VSIM_WORK_DIR) \
 .PHONY: questa-compile
 questa-compile: CV_CORE_pkg
 	@echo "$(BANNER)"
-	@echo "* Compiling CORE TB and CV32E20 with Questa"
+	@echo "* Compiling CORE TB and CV32E20 with Full Questa License"
 	@echo "$(BANNER)"
 	rm -rf $(VSIM_WORK_DIR)
 	mkdir -p $(SIM_RESULTS)
 	vlib $(VSIM_WORK_DIR)
 	$(VLOG) $(VLOG_FLAGS) -f $(CV_CORE_MANIFEST)
 	$(VLOG) $(VLOG_FLAGS) $(TBSRC_PKG)
+	# New Step: Compile the random interrupt generator before the main TB source
+	$(VLOG) $(VLOG_FLAGS) tb_riscv/riscv_random_interrupt_generator.sv
 	$(VLOG) $(VLOG_FLAGS) $(TBSRC_VERI)
 	$(VOPT) $(VOPT_FLAGS) tb_top
 
