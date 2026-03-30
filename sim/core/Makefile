@@ -284,6 +284,10 @@ clean_all: clean-all-banner clean-all-targets
 certification_PROGRAM_PATH    = $(ACT4_PKG)/work/cv32e20/elfs
 certification_PROGRAM_RELPATH = ../../vendor_lib/riscv-arch-test/act4/work/cv32e20/elfs
 
+# Optional extension filter: narrows certify to a single extension.
+# Usage: make certify FILTER=Zicsr
+FILTER ?=
+
 ###############################################################################
 # certification test target (run ALL ELFs under compliance/rv32, quiet + summary)
 .PHONY: gen
@@ -308,7 +312,7 @@ certify: verilate
 	SUMMARY="$(VERI_LOG_DIR)/certification_summary.txt"; \
 	echo "RESULT  TEST" > "$$SUMMARY"; \
 	echo "------  ----" >> "$$SUMMARY"; \
-	ROOT="$(certification_PROGRAM_PATH)/rv32i"; \
+	ROOT="$(certification_PROGRAM_PATH)/rv32i$(if $(FILTER),/$(FILTER),)"; \
 	ELFS="$$(find -L "$$ROOT" \( -type f -o -type l \) -a \( -iname '*.elf' -o -iname '*.elf32' \) 2>/dev/null | sort)"; \
 	if [ -z "$$ELFS" ]; then \
 	  echo "No .elf files found under $$ROOT"; \
