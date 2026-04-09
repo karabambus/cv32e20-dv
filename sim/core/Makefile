@@ -297,7 +297,7 @@ gen: $(ACT4_PKG)
 	@$(MAKE) -C $(ACT4_PKG) clean
 	@echo "* Generating ACT4.0 tests..."
 	@$(MAKE) -C $(ACT4_PKG) \
-		EXTENSIONS=I,M,C,Zca,Zicsr,Zifencei \
+		EXCLUDE_EXTENSIONS=ExceptionsSm,InterruptsSm,ExceptionsZc,Sm \
 		CONFIG_FILES=config/cores/cve2/cv32e20/test_config.yaml
 	@echo "* Tests generated in: $(certification_PROGRAM_PATH)"
 
