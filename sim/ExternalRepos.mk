@@ -40,4 +40,4 @@ SVLIB_HASH       ?= c25509a7e54a880fe8f58f3daa2f891d6ecf6428
 # ACT4 (RISC-V Architectural Certification Tests)
 ACT4_REPO   ?= https://github.com/riscv-non-isa/riscv-arch-test
 ACT4_BRANCH ?= act4
-ACT4_HASH   ?= 3b087b34750a63522dadb7fbec857bbe9d8e2a70
+ACT4_HASH   ?= 362b819b97087e96dbe4a04cce70c1515c21472b
