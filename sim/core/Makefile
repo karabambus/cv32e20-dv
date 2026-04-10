@@ -312,18 +312,20 @@ certify: verilate
 	SUMMARY="$(VERI_LOG_DIR)/certification_summary.txt"; \
 	echo "RESULT  TEST" > "$$SUMMARY"; \
 	echo "------  ----" >> "$$SUMMARY"; \
-	ROOT="$(certification_PROGRAM_PATH)/rv32i$(if $(FILTER),/$(FILTER),)"; \
-	ELFS="$$(find -L "$$ROOT" \( -type f -o -type l \) -a \( -iname '*.elf' -o -iname '*.elf32' \) 2>/dev/null | sort)"; \
+	UNPRIV_ROOT="$(certification_PROGRAM_PATH)/rv32i$(if $(FILTER),/$(FILTER),)"; \
+	PRIV_ROOT="$(certification_PROGRAM_PATH)/priv$(if $(FILTER),/$(FILTER),)"; \
+	ELFS="$$(find -L "$$UNPRIV_ROOT" "$$PRIV_ROOT" \( -type f -o -type l \) -a \( -iname '*.elf' -o -iname '*.elf32' \) 2>/dev/null | sort)"; \
 	if [ -z "$$ELFS" ]; then \
-	  echo "No .elf files found under $$ROOT"; \
+	  echo "No .elf files found under $$UNPRIV_ROOT or $$PRIV_ROOT"; \
 	  echo "Debug listing (2 levels):"; \
-	  find "$$ROOT" -maxdepth 2 -print || true; \
+	  find "$$UNPRIV_ROOT" "$$PRIV_ROOT" -maxdepth 2 -print || true; \
 	  exit 2; \
 	fi; \
+	ELF_BASE="$(certification_PROGRAM_PATH)"; \
 	PASS=0; FAIL=0; TOTAL=0; \
 	for ELF in $$ELFS; do \
 	  TOTAL=$$((TOTAL+1)); \
-	  REL="$${ELF#$$ROOT/}"; \
+	  REL="$${ELF#$$ELF_BASE/}"; \
 	  BASE="$${ELF%.*}"; \
 	  HEX="$$BASE.hex"; \
 	  LOG="$(VERI_LOG_DIR)/$${REL%.*}.log"; \
