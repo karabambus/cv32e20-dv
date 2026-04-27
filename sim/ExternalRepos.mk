@@ -39,5 +39,5 @@ SVLIB_HASH       ?= c25509a7e54a880fe8f58f3daa2f891d6ecf6428
 
 # ACT4 (RISC-V Architectural Certification Tests)
 ACT4_REPO   ?= https://github.com/karabambus/riscv-arch-test
-ACT4_BRANCH ?= fix/cv32e20-misaligned-sail-config
-ACT4_HASH   ?= 124b4a7ef9db4af2b38d76c5a1a49e849dca64b7
+ACT4_BRANCH ?= fix/cv32e20-sail-schema-v0.11
+ACT4_HASH   ?= head
