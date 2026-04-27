@@ -30,7 +30,7 @@ EMBENCH_HASH    ?= 6934ddd1ff445245ee032d4258fdeb9828b72af4
 COMPLIANCE_REPO   ?= https://github.com/riscv/riscv-compliance
 COMPLIANCE_BRANCH ?= master
 # 2020-08-19
-COMPLIANCE_HASH   ?= c21a2e86afa3f7d4292a2dd26b759f3f29cde497
+COMPLIANCE_HASH   ?= 0a16526f47458456645cd25cdd5f79b8a28c0796
 
 # SVLIB
 SVLIB_REPO       ?= https://bitbucket.org/verilab/svlib/src/master/svlib
@@ -38,6 +38,6 @@ SVLIB_BRANCH     ?= master
 SVLIB_HASH       ?= c25509a7e54a880fe8f58f3daa2f891d6ecf6428
 
 # ACT4 (RISC-V Architectural Certification Tests)
-ACT4_REPO   ?= https://github.com/riscv-non-isa/riscv-arch-test
-ACT4_BRANCH ?= act4
-ACT4_HASH   ?= 0a16526f47458456645cd25cdd5f79b8a28c0796
+ACT4_REPO   ?= https://github.com/karabambus/riscv-arch-test
+ACT4_BRANCH ?= fix/cv32e20-sail-schema-v0.11
+ACT4_HASH   ?= head
