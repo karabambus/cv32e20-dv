@@ -384,3 +384,9 @@ elfs-package:
 	$(MAKE_PATH)/../scripts/elfs_manifest.py $$OUT $$FP > $$OUT.manifest.json; \
 	echo "Bundle:   $$OUT"; \
 	echo "Manifest: $$OUT.manifest.json"
+
+# Download a prebuilt bundle into $(certification_PROGRAM_PATH).
+# Override source with: make download-prebuilt-elfs URL=file:///path/to/bundle.tar.zst
+.PHONY: download-prebuilt-elfs
+download-prebuilt-elfs:
+	@URL="$(URL)" $(MAKE_PATH)/../scripts/download_prebuilt_elfs.sh
