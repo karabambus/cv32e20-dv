@@ -365,3 +365,22 @@ gen-certify: gen certify
 .PHONY: elfs-fingerprint
 elfs-fingerprint:
 	@$(MAKE_PATH)/../scripts/elfs_fingerprint.sh
+
+.PHONY: elfs-package
+elfs-package:
+	@command -v zstd >/dev/null 2>&1 || { echo "Error: 'zstd' not found"; exit 1; }
+	@if [ ! -d "$(certification_PROGRAM_PATH)/rv32i" ]; then \
+	    echo "Error: no ELFs at $(certification_PROGRAM_PATH). Run 'make gen' first."; \
+	    exit 1; \
+	fi
+	@set -e; \
+	FP=$$($(MAKE_PATH)/../scripts/elfs_fingerprint.sh); \
+	OUT=$(CV32E20_DV)/dist/act4-elfs-cv32e20-$$FP.tar.zst; \
+	mkdir -p $(CV32E20_DV)/dist; \
+	cd $(ACT4_PKG) && \
+	tar --sort=name --owner=0 --group=0 --numeric-owner \
+	    --mtime='UTC 2020-01-01' \
+	    -cf - work/cv32e20/elfs | zstd -19 -T0 -q -o $$OUT; \
+	$(MAKE_PATH)/../scripts/elfs_manifest.py $$OUT $$FP > $$OUT.manifest.json; \
+	echo "Bundle:   $$OUT"; \
+	echo "Manifest: $$OUT.manifest.json"
