@@ -70,6 +70,50 @@ make certify   # run ELFs through Verilator DUT
 Results are written to:
 `simulation_results/certification/test_program/bsp/certification_summary.txt`
 
+### Prebuilt ELF flow (CI / fast iteration)
+
+`make gen` is slow: it clones ACT4 (~1.2 GB) and runs Sail-based test
+generation (~30 min, requires `uv` and `sail_riscv_sim`). The ELFs are
+deterministic in their inputs, so they can be produced once and reused.
+
+The bundle to use is recorded in `sim/.act4-elfs-pin` (one line,
+fingerprint hex). Certify-side CI reads the pin and downloads the
+matching `elfs-<pin>` GitHub Release.
+
+Targets:
+
+```
+make elfs-fingerprint        # 12-char SHA256 prefix over ACT4 inputs (prebuild side)
+make elfs-package            # tarball ELFs into dist/act4-elfs-cv32e20-<fp>.tar.zst
+make download-prebuilt-elfs  # fetch the bundle for the pin and extract it
+make certify-prebuilt        # run certify against an already-extracted ELF tree
+```
+
+Typical CI usage:
+```
+make download-prebuilt-elfs   # reads sim/.act4-elfs-pin, gh release download elfs-<pin>
+make certify-prebuilt         # verilate + run all ELFs
+```
+
+Local override (no `gh` / GitHub Release needed):
+```
+make download-prebuilt-elfs URL=file:///path/to/act4-elfs-cv32e20-<fp>.tar.zst
+```
+
+#### Refreshing the prebuilt bundle
+
+When `ACT4_HASH` or the `gen:` recipe changes, the next bundle will
+have a new fingerprint. To roll the change forward:
+
+1. Run `make gen` then `make elfs-package` (or trigger the prebuild
+   workflow). This produces `dist/act4-elfs-cv32e20-<fp>.tar.zst` and
+   prints the new fingerprint.
+2. Replace the line in `sim/.act4-elfs-pin` with the new fingerprint.
+3. Commit the bumped pin alongside whichever input change triggered it.
+
+`make elfs-fingerprint` requires Sail to be installed (it calls
+`sail_riscv_sim --version`).
+
 <!--
 Running the testbench with Metrics [dsim](https://metrics.ca)
 ----------------------
