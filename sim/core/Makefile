@@ -390,3 +390,14 @@ elfs-package:
 .PHONY: download-prebuilt-elfs
 download-prebuilt-elfs:
 	@URL="$(URL)" $(MAKE_PATH)/../scripts/download_prebuilt_elfs.sh
+
+# Run certify against a prebuilt ELF tree (no `make gen` step).
+# CI uses this; local devs can keep using `make gen-certify`.
+.PHONY: certify-prebuilt
+certify-prebuilt:
+	@if [ ! -d "$(certification_PROGRAM_PATH)/rv32i" ]; then \
+	    echo "Error: no prebuilt ELFs at $(certification_PROGRAM_PATH)."; \
+	    echo "Run 'make download-prebuilt-elfs' first."; \
+	    exit 2; \
+	fi
+	@$(MAKE) certify
