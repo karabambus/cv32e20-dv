@@ -354,3 +354,14 @@ certify: verilate
 
 .PHONY: gen-certify
 gen-certify: gen certify
+
+###############################################################################
+# Prebuilt-ELF support (used by CI to skip the slow `gen` step).
+#
+# Fingerprint: 12-char SHA256 prefix over the inputs that determine ELF content
+# (ACT4_HASH, the gen recipe, sail version). Same value is computed in CI and
+# used as the GitHub Release tag for the prebuilt bundle.
+
+.PHONY: elfs-fingerprint
+elfs-fingerprint:
+	@$(MAKE_PATH)/../scripts/elfs_fingerprint.sh
