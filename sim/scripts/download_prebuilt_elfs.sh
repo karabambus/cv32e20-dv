@@ -10,7 +10,8 @@
 # Source resolution order:
 #   1. URL=<path-or-url> override (file:// or https://;
 #      manifest expected at $URL.manifest.json)
-#   2. gh release download elfs-<pin> (needs `gh` and auth)
+#   2. GitHub Release asset under GH_REPO (default: parsed from `origin`).
+#      Public releases need no auth; private repos need GITHUB_TOKEN.
 #
 # Exits 2 if no release matches the pin.
 set -euo pipefail
@@ -28,7 +29,7 @@ FP="$(tr -d '[:space:]' < "$PIN_FILE")"
 [ -n "$FP" ] || die "pin file $PIN_FILE is empty"
 
 TAG="elfs-$FP"
-TARBALL_NAME="act4-elfs-cv32e20-$FP.tar.zst"
+TARBALL_NAME="act4-elfs-cv32e20-$FP.tar.gz"
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
@@ -49,14 +50,18 @@ if [ -n "$URL" ]; then
     fetch_one "$URL" "$TARBALL" || die "fetch failed: $URL"
     fetch_one "$URL.manifest.json" "$MANIFEST" || die "fetch failed: $URL.manifest.json"
 else
-    command -v gh >/dev/null 2>&1 || die "'gh' CLI not found and URL not set"
-    if ! gh release view "$TAG" >/dev/null 2>&1; then
-        die "no release '$TAG' found. Bump sim/.act4-elfs-pin or trigger prebuild." 2
+    GH_REPO="${GH_REPO:-$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null \
+                         | sed -E 's#\.git$##; s#.*[:/]([^/]+/[^/]+)$#\1#')}"
+    [ -n "$GH_REPO" ] || die "GH_REPO not set and could not derive from 'origin' remote"
+    BASE="https://github.com/$GH_REPO/releases/download/$TAG"
+    AUTH=()
+    [ -n "${GITHUB_TOKEN:-}" ] && AUTH=(-H "Authorization: Bearer $GITHUB_TOKEN")
+    echo "Fetching bundle from $BASE"
+    if ! curl -sfI -o /dev/null "${AUTH[@]}" "$BASE/$TARBALL_NAME"; then
+        die "no release '$TAG' at https://github.com/$GH_REPO. Bump sim/.act4-elfs-pin or trigger prebuild." 2
     fi
-    gh release download "$TAG" \
-        --pattern "$TARBALL_NAME" \
-        --pattern "$TARBALL_NAME.manifest.json" \
-        --dir "$WORKDIR"
+    curl -fsSL "${AUTH[@]}" -o "$TARBALL"  "$BASE/$TARBALL_NAME"
+    curl -fsSL "${AUTH[@]}" -o "$MANIFEST" "$BASE/$TARBALL_NAME.manifest.json"
 fi
 
 [ -f "$TARBALL" ]  || die "missing tarball after fetch"
@@ -76,7 +81,7 @@ if [ "$EXTRACT_ROOT" = "$DEST" ]; then
 fi
 mkdir -p "$EXTRACT_ROOT"
 rm -rf "$DEST"
-zstd -dcf "$TARBALL" | tar -xf - -C "$EXTRACT_ROOT"
+tar -xzf "$TARBALL" -C "$EXTRACT_ROOT"
 
 echo "Extracted to: $DEST"
 echo "Pin:          $FP"

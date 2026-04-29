@@ -36,10 +36,8 @@ def main() -> None:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
 
-    # Count regular files inside the tarball. Python tarfile lacks zstd support,
-    # so pipe through the zstd + tar binaries.
     listing = subprocess.run(
-        ["bash", "-c", f"zstd -dcf {tarball!r} | tar -tf -"],
+        ["tar", "-tzf", tarball],
         check=True, capture_output=True, text=True,
     ).stdout.splitlines()
     file_count = sum(1 for line in listing if not line.endswith("/"))

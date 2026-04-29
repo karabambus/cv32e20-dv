@@ -368,25 +368,24 @@ elfs-fingerprint:
 
 .PHONY: elfs-package
 elfs-package:
-	@command -v zstd >/dev/null 2>&1 || { echo "Error: 'zstd' not found"; exit 1; }
 	@if [ ! -d "$(certification_PROGRAM_PATH)/rv32i" ]; then \
 	    echo "Error: no ELFs at $(certification_PROGRAM_PATH). Run 'make gen' first."; \
 	    exit 1; \
 	fi
 	@set -e; \
 	FP=$$($(MAKE_PATH)/../scripts/elfs_fingerprint.sh); \
-	OUT=$(CV32E20_DV)/dist/act4-elfs-cv32e20-$$FP.tar.zst; \
+	OUT=$(CV32E20_DV)/dist/act4-elfs-cv32e20-$$FP.tar.gz; \
 	mkdir -p $(CV32E20_DV)/dist; \
 	cd $(ACT4_PKG) && \
 	tar --sort=name --owner=0 --group=0 --numeric-owner \
 	    --mtime='UTC 2020-01-01' \
-	    -cf - work/cv32e20/elfs | zstd -19 -T0 -q -o $$OUT; \
+	    -cf - work/cv32e20/elfs | gzip -9 > $$OUT; \
 	$(MAKE_PATH)/../scripts/elfs_manifest.py $$OUT $$FP > $$OUT.manifest.json; \
 	echo "Bundle:   $$OUT"; \
 	echo "Manifest: $$OUT.manifest.json"
 
 # Download a prebuilt bundle into $(certification_PROGRAM_PATH).
-# Override source with: make download-prebuilt-elfs URL=file:///path/to/bundle.tar.zst
+# Override source with: make download-prebuilt-elfs URL=file:///path/to/bundle.tar.gz
 .PHONY: download-prebuilt-elfs
 download-prebuilt-elfs:
 	@URL="$(URL)" $(MAKE_PATH)/../scripts/download_prebuilt_elfs.sh
