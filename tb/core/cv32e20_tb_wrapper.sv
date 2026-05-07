@@ -64,6 +64,11 @@ module cv32e20_tb_wrapper
     logic [0:4]                   irq_id_out;
     logic                         irq_sec;
 
+    // Direct-driven irq pins from mm_ram virtual peripheral (ACT4 InterruptsSm)
+    logic                         irq_software;
+    logic                         irq_timer;
+    logic                         irq_external;
+
 
     // interrupts (only timer for now)
     assign irq_sec     = '0;
@@ -103,10 +108,10 @@ module cv32e20_tb_wrapper
          .data_rdata_i           ( data_rdata            ),
          .data_err_i             ( 1'b0                  ),
 
-         // Interrupts verified in UVM environment
-         .irq_software_i         (  1'b0                 ),
-         .irq_timer_i            (  1'b0                 ),
-         .irq_external_i         (  1'b0                 ),
+         // ACT4 InterruptsSm: driven by mm_ram irq level register at 0x15000000/0x1500000C
+         .irq_software_i         ( irq_software          ),
+         .irq_timer_i            ( irq_timer             ),
+         .irq_external_i         ( irq_external          ),
          .irq_fast_i             ( 16'h0000              ),
          .irq_nm_i               (  1'b0                 ),       // non-maskeable interrupt
 
@@ -150,6 +155,10 @@ module cv32e20_tb_wrapper
          .irq_id_i       ( irq_id_in                                 ),
          .irq_ack_i      ( irq_ack                                   ),
          .irq_o          ( irq_id_out                                ),
+
+         .irq_software_o ( irq_software                              ),
+         .irq_timer_o    ( irq_timer                                 ),
+         .irq_external_o ( irq_external                              ),
 
          .debug_req_o    ( debug_req                                 ),
 

@@ -291,6 +291,10 @@ FILTER ?=
 ###############################################################################
 # certification test target (run ALL ELFs under compliance/rv32, quiet + summary)
 .PHONY: gen
+# ACT4 default EXCLUDE_EXTENSIONS skips Sm and InterruptsSm. Override here to
+# keep them so priv/Sm and priv/InterruptsSm get generated for cv32e20.
+# S/InterruptsS/InterruptsU/Sv/PMP* stay excluded (cv32e20 is M-mode only).
+ACT4_EXCLUDE_EXTENSIONS ?= S,InterruptsS,InterruptsU,InterruptsSstc,Sv,SvaduPMP,SvPMP,SvPMPZicbo,Svade,Svadu,Svinval,SvZicbo,Svnapot,Svpbmt,ExceptionsSvZalrsc,ExceptionsSvZaamo,ExceptionsZalrsc,ExceptionsZaamo,PMPS,PMPU,PMPSm
 gen: $(ACT4_PKG)
 	@command -v uv >/dev/null 2>&1 || { echo "Error: 'uv' not found. Install from https://docs.astral.sh/uv/getting-started/installation/"; exit 1; }
 	@echo "* Cleaning ACT4.0 directory..."
@@ -298,6 +302,7 @@ gen: $(ACT4_PKG)
 	@echo "* Generating ACT4.0 tests..."
 	@$(MAKE) -C $(ACT4_PKG) \
 		EXTENSIONS= \
+		EXCLUDE_EXTENSIONS=$(ACT4_EXCLUDE_EXTENSIONS) \
 		CONFIG_FILES=config/cores/cve2/cv32e20/test_config.yaml
 	@echo "* Tests generated in: $(certification_PROGRAM_PATH)"
 

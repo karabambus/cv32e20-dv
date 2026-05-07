@@ -54,6 +54,13 @@ module mm_ram
      input logic                          irq_ack_i,
      output logic [IRQ_WIDTH-1:0]         irq_o,
 
+     // Direct-driven irq pins, level-sensitive.
+     // Set by writes to MMADDR_TIMERREG (0x15000000), cleared by writes to
+     // MMADDR_IRQCLR (0x1500000C). Used by ACT4 InterruptsSm tests.
+     output logic                         irq_software_o,
+     output logic                         irq_timer_o,
+     output logic                         irq_external_o,
+
      input logic [31:0]                   pc_core_id_i,
 
      output logic                         debug_req_o,
@@ -86,6 +93,7 @@ module mm_ram
     localparam int                        MMADDR_TIMERREG   = 32'h1500_0000;
     localparam int                        MMADDR_TIMERVAL   = 32'h1500_0004;
     localparam int                        MMADDR_DBG        = 32'h1500_0008;
+    localparam int                        MMADDR_IRQCLR     = 32'h1500_000C;
     localparam int                        MMADDR_RNDSTALL   = 16'h1600;
     localparam int                        MMADDR_RNDNUM     = 32'h1500_1000;
     localparam int                        MMADDR_TICKS      = 32'h1500_1004;
@@ -149,6 +157,11 @@ module mm_ram
     logic                          timer_reg_valid;
     logic                          timer_val_valid;
     logic [31:0]                   timer_wdata;
+
+    // signals to direct-driven irq level register (for ACT4 InterruptsSm tests)
+    logic [31:0]                   irq_level_q;
+    logic                          irq_clr_valid;
+    logic [31:0]                   irq_clr_wdata;
 
             // cycle counting
     logic [31:0]                   cycle_count_q;
@@ -298,6 +311,8 @@ module mm_ram
         timer_wdata         = '0;
         timer_reg_valid     = '0;
         timer_val_valid     = '0;
+        irq_clr_valid       = '0;
+        irq_clr_wdata       = '0;
         debugger_wdata      = '0;
         debugger_valid      = '0;
         sig_end_d           = sig_end_q;
@@ -401,6 +416,10 @@ module mm_ram
                     debugger_wdata = data_wdata_i;
                     debugger_valid = '1;
 
+                end else if (data_addr_i == MMADDR_IRQCLR) begin
+                    irq_clr_wdata = data_wdata_i;
+                    irq_clr_valid = '1;
+
                 end else if (data_addr_i[31:16] == MMADDR_RNDSTALL) begin
                     rnd_stall_req   = data_req_i;
                     rnd_stall_wdata = data_wdata_i;
@@ -452,6 +471,7 @@ module mm_ram
          || data_addr_i == MMADDR_TIMERREG
          || data_addr_i == MMADDR_TIMERVAL
          || data_addr_i == MMADDR_DBG
+         || data_addr_i == MMADDR_IRQCLR
          || data_addr_i == MMADDR_TESTSTATUS
          || data_addr_i == MMADDR_EXIT
          || data_addr_i == MMADDR_SIGBEGIN
@@ -534,6 +554,28 @@ module mm_ram
 
         end // else: !if(~rst_ni)
     end // block: tb_irq_timer
+
+    // Direct-driven irq level register for ACT4 InterruptsSm tests.
+    // Write to MMADDR_TIMERREG (0x15000000) ORs wdata bits high.
+    // Write to MMADDR_IRQCLR  (0x1500000C) ANDs out wdata bits.
+    // Bit positions match cve2_top irq pin numbering:
+    //   bit 3  -> irq_software_o  (mip.MSIP)
+    //   bit 7  -> irq_timer_o     (mip.MTIP)
+    //   bit 11 -> irq_external_o  (mip.MEIP)
+    always_ff @(posedge clk_i, negedge rst_ni) begin: irq_level_reg
+        if (~rst_ni) begin
+            irq_level_q <= '0;
+        end else begin
+            if (timer_reg_valid)
+                irq_level_q <= irq_level_q | timer_wdata;
+            else if (irq_clr_valid)
+                irq_level_q <= irq_level_q & ~irq_clr_wdata;
+        end
+    end
+
+    assign irq_software_o = irq_level_q[3];
+    assign irq_timer_o    = irq_level_q[7];
+    assign irq_external_o = irq_level_q[11];
 
     // Count cycles
     always_ff @(posedge clk_i, negedge rst_ni) begin: tb_cycle_counter
