@@ -86,6 +86,13 @@ module mm_ram
     localparam int                        MMADDR_TIMERREG   = 32'h1500_0000;
     localparam int                        MMADDR_TIMERVAL   = 32'h1500_0004;
     localparam int                        MMADDR_DBG        = 32'h1500_0008;
+    // Sail-protocol simple_interrupt_generator v1.0 (sail-riscv doc).
+    // base+0 = version (R: 0x00010000, W: ignored); base+4 = platform
+    // (R: 0, W: bit31=set/clr, bit3=MSI, bit11=MEI [bit1=SSI, bit9=SEI ignored on M-only]).
+    localparam int                        MMADDR_SIG_VERSION  = 32'h1500_0020;
+    localparam int                        MMADDR_SIG_PLATFORM = 32'h1500_0024;
+    localparam logic [31:0]               SIG_VERSION_VAL     = 32'h0001_0000;
+    localparam logic [31:0]               SIG_ALLOWED_MASK    = 32'h0000_0A0A; // bits 1,3,9,11
     localparam int                        MMADDR_RNDSTALL   = 16'h1600;
     localparam int                        MMADDR_RNDNUM     = 32'h1500_1000;
     localparam int                        MMADDR_TICKS      = 32'h1500_1004;
@@ -146,6 +153,10 @@ module mm_ram
     logic [IRQ_WIDTH-1:0]          timer_irq_mask_q;
     logic [31:0]                   timer_cnt_q;
     logic [IRQ_WIDTH-1:0]          irq_q;
+    // Sail simple_interrupt_generator platform-register state
+    logic [IRQ_WIDTH-1:0]          sig_platform_q;
+    logic                          sig_platform_we;
+    logic [31:0]                   sig_platform_wdata;
     logic                          timer_reg_valid;
     logic                          timer_val_valid;
     logic [31:0]                   timer_wdata;
@@ -305,6 +316,8 @@ module mm_ram
         timer_val_valid     = '0;
         debugger_wdata      = '0;
         debugger_valid      = '0;
+        sig_platform_we     = '0;
+        sig_platform_wdata  = '0;
         sig_end_d           = sig_end_q;
         sig_begin_d         = sig_begin_q;
         rnd_stall_req       = '0;
@@ -406,6 +419,14 @@ module mm_ram
                     debugger_wdata = data_wdata_i;
                     debugger_valid = '1;
 
+                end else if (data_addr_i == MMADDR_SIG_PLATFORM) begin
+                    // Sail simple_interrupt_generator platform write
+                    sig_platform_we    = '1;
+                    sig_platform_wdata = data_wdata_i;
+
+                end else if (data_addr_i == MMADDR_SIG_VERSION) begin
+                    // version register is read-only; writes ignored per spec
+
                 end else if (data_addr_i[31:16] == MMADDR_RNDSTALL) begin
                     rnd_stall_req   = data_req_i;
                     rnd_stall_wdata = data_wdata_i;
@@ -457,6 +478,8 @@ module mm_ram
          || data_addr_i == MMADDR_TIMERREG
          || data_addr_i == MMADDR_TIMERVAL
          || data_addr_i == MMADDR_DBG
+         || data_addr_i == MMADDR_SIG_VERSION
+         || data_addr_i == MMADDR_SIG_PLATFORM
          || data_addr_i == MMADDR_TESTSTATUS
          || data_addr_i == MMADDR_EXIT
          || data_addr_i == MMADDR_SIGBEGIN
@@ -511,7 +534,20 @@ module mm_ram
         end
     end
 
-    assign irq_o    = irq_q | rnd_irq << RND_IRQ_ID;
+    assign irq_o    = irq_q | sig_platform_q | (rnd_irq << RND_IRQ_ID);
+
+    // Sail simple_interrupt_generator platform-register update.
+    // Reserved bits ignored; write 0 to stay compatible.
+    always_ff @(posedge clk_i, negedge rst_ni) begin: sig_platform_reg
+      if (!rst_ni) begin
+        sig_platform_q <= '0;
+      end else if (sig_platform_we) begin
+        if (sig_platform_wdata[31])
+          sig_platform_q <= sig_platform_q | (sig_platform_wdata & SIG_ALLOWED_MASK);
+        else
+          sig_platform_q <= sig_platform_q & ~(sig_platform_wdata & SIG_ALLOWED_MASK);
+      end
+    end
 
     // Set irq vector to timer_irq_mask_q when timer counts down
     // irq bit cleared when acknowledged
