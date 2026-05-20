@@ -57,11 +57,10 @@ module cv32e20_tb_wrapper
     // signals to debug unit
     logic                         debug_req;
 
-    // irq signals (not used)
-    logic [0:31]                  irq;
+    // irq signals (driven from mm_ram virtual interrupt peripheral)
+    logic [31:0]                  irq_from_mm_ram;
     logic [0:4]                   irq_id_in;
     logic                         irq_ack;
-    logic [0:4]                   irq_id_out;
     logic                         irq_sec;
 
 
@@ -103,11 +102,12 @@ module cv32e20_tb_wrapper
          .data_rdata_i           ( data_rdata            ),
          .data_err_i             ( 1'b0                  ),
 
-         // Interrupts verified in UVM environment
-         .irq_software_i         (  1'b0                 ),
-         .irq_timer_i            (  1'b0                 ),
-         .irq_external_i         (  1'b0                 ),
-         .irq_fast_i             ( 16'h0000              ),
+         // Interrupts from mm_ram virtual interrupt peripheral
+         // mip bit layout: MSI=3, MTI=7, MEI=11, fast/local=16..31
+         .irq_software_i         ( irq_from_mm_ram[3]      ),
+         .irq_timer_i            ( irq_from_mm_ram[7]      ),
+         .irq_external_i         ( irq_from_mm_ram[11]     ),
+         .irq_fast_i             ( irq_from_mm_ram[31:16]  ),
          .irq_nm_i               (  1'b0                 ),       // non-maskeable interrupt
 
          .debug_req_i            ( debug_req             ),
@@ -149,7 +149,7 @@ module cv32e20_tb_wrapper
 
          .irq_id_i       ( irq_id_in                                 ),
          .irq_ack_i      ( irq_ack                                   ),
-         .irq_o          ( irq_id_out                                ),
+         .irq_o          ( irq_from_mm_ram                           ),
 
          .debug_req_o    ( debug_req                                 ),
 
