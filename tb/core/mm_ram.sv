@@ -181,6 +181,11 @@ module mm_ram
 
     //random or monitor interrupt request
     logic                          rnd_irq;
+`ifdef VERILATOR
+    // riscv_random_interrupt_generator is `ifndef VERILATOR; under Verilator
+    // rnd_irq has no driver. Tie it to 0 explicitly so irq_o is fully defined.
+    assign rnd_irq = 1'b0;
+`endif
 
     // used by dump_signature methods
     string                         sig_file;
