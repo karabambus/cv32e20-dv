@@ -1,0 +1,8 @@
+name: csr_discrepancy_test
+uvm_test: uvmt_$(CV_CORE_LC)_firmware_test_c
+description: >
+    Verifies four RTL-vs-manual CSR discrepancies in CVE2 (CV32E20).
+    #1: cpuctrl (0x7C0) access raises illegal instruction (not WARL as documented).
+    #2: Zicntr user-mode aliases 0xCxx raise illegal instruction (no RTL case handler).
+    #7: mhpmevent3-31 writes are silently discarded (hardwired, not WARL-writable).
+    #8: mcause stores 6-bit exception code bits[5:0]; manual only documents bits[4:0].
