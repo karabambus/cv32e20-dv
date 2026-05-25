@@ -1,0 +1,6 @@
+name: umode_interrupt_mie
+uvm_test: uvmt_$(CV_CORE_LC)_firmware_test_c
+description: >
+    Directed test: an M-mode interrupt must be taken in U-mode regardless of
+    mstatus.MIE (Priv ISA sec 3.1.6 / 3.1.9a). Triggers an MSI from U-mode with
+    MIE=0 (must be taken) and MIE=1 (control).
