@@ -1,7 +1,7 @@
 # umode_interrupt_mie.S
 #
 # Checks if an M-mode interrupt is taken in U-mode with mstatus.MIE=0 (required
-# by Priv ISA sec 3.1.6 / 3.1.9a). Triggers an MSI from U-mode twice: Phase A
+# by Priv ISA v1.12/20211203 sec 3.1.6.1 / 3.1.9a). Triggers an MSI from U-mode twice: Phase A
 # (MIE=0, must be taken) and Phase B (MIE=1, control). Exit value at 0x20000000:
 # 123456789=PASS (A taken), 1=FAIL (A not taken, B taken: MIE-gated), 2=trigger
 # problem. Addresses target the cv32e20-dv mm_ram testbench.
