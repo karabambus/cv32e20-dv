@@ -96,13 +96,19 @@ module mm_ram
     localparam int                        MMADDR_RNDSTALL   = 16'h1600;
     localparam int                        MMADDR_RNDNUM     = 32'h1500_1000;
     localparam int                        MMADDR_TICKS      = 32'h1500_1004;
+    // CLINT-style machine timer at Sail's CLINT base 0x0200_0000 (matches
+    // sail_macros.h / sail.json). 64-bit mtime/mtimecmp; MTIP = mtime>=mtimecmp.
+    localparam int                        MMADDR_MTIMECMP   = 32'h0200_4000;
+    localparam int                        MMADDR_MTIMECMPH  = 32'h0200_4004;
+    localparam int                        MMADDR_MTIME      = 32'h0200_BFF8;
+    localparam int                        MMADDR_MTIMEH     = 32'h0200_BFFC;
 
     // UVM info tags
     localparam string                     MM_RAM_TAG = "MM_RAM";
     localparam string                     RNDSTALL_TAG = "RNDSTALL";
 
     // mux for read and writes
-    enum logic [2:0]{RAM, MM, RND_STALL, ERR, RND_NUM, TICKS} select_rdata_d, select_rdata_q;
+    enum logic [2:0]{RAM, MM, RND_STALL, ERR, RND_NUM, TICKS, CLINT} select_rdata_d, select_rdata_q;
 
     enum logic {T_RAM, T_PER} transaction;
 
@@ -160,6 +166,14 @@ module mm_ram
     logic                          timer_reg_valid;
     logic                          timer_val_valid;
     logic [31:0]                   timer_wdata;
+    // CLINT machine timer state
+    logic [63:0]                   mtime_q;
+    logic [63:0]                   mtimecmp_q;
+    logic                          mtime_we_lo, mtime_we_hi;
+    logic                          mtimecmp_we_lo, mtimecmp_we_hi;
+    logic [31:0]                   clint_wdata;
+    logic                          mtip;
+    logic [31:0]                   clint_rdata_d, clint_rdata_q;
 
             // cycle counting
     logic [31:0]                   cycle_count_q;
@@ -318,6 +332,12 @@ module mm_ram
         debugger_valid      = '0;
         sig_platform_we     = '0;
         sig_platform_wdata  = '0;
+        mtime_we_lo         = '0;
+        mtime_we_hi         = '0;
+        mtimecmp_we_lo      = '0;
+        mtimecmp_we_hi      = '0;
+        clint_wdata         = data_wdata_i;
+        clint_rdata_d       = '0;
         sig_end_d           = sig_end_q;
         sig_begin_d         = sig_begin_q;
         rnd_stall_req       = '0;
@@ -427,6 +447,15 @@ module mm_ram
                 end else if (data_addr_i == MMADDR_SIG_VERSION) begin
                     // version register is read-only; writes ignored per spec
 
+                end else if (data_addr_i == MMADDR_MTIMECMP) begin
+                    mtimecmp_we_lo = '1;
+                end else if (data_addr_i == MMADDR_MTIMECMPH) begin
+                    mtimecmp_we_hi = '1;
+                end else if (data_addr_i == MMADDR_MTIME) begin
+                    mtime_we_lo = '1;
+                end else if (data_addr_i == MMADDR_MTIMEH) begin
+                    mtime_we_hi = '1;
+
                 end else if (data_addr_i[31:16] == MMADDR_RNDSTALL) begin
                     rnd_stall_req   = data_req_i;
                     rnd_stall_wdata = data_wdata_i;
@@ -459,6 +488,18 @@ module mm_ram
                     select_rdata_d = RND_NUM;
                 end else if (data_addr_i == MMADDR_TICKS) begin
                     select_rdata_d = TICKS;
+                end else if (data_addr_i == MMADDR_MTIME) begin
+                    select_rdata_d = CLINT;
+                    clint_rdata_d  = mtime_q[31:0];
+                end else if (data_addr_i == MMADDR_MTIMEH) begin
+                    select_rdata_d = CLINT;
+                    clint_rdata_d  = mtime_q[63:32];
+                end else if (data_addr_i == MMADDR_MTIMECMP) begin
+                    select_rdata_d = CLINT;
+                    clint_rdata_d  = mtimecmp_q[31:0];
+                end else if (data_addr_i == MMADDR_MTIMECMPH) begin
+                    select_rdata_d = CLINT;
+                    clint_rdata_d  = mtimecmp_q[63:32];
                 end else
                     select_rdata_d = ERR;
 
@@ -486,6 +527,10 @@ module mm_ram
          || data_addr_i == MMADDR_SIGEND
          || data_addr_i == MMADDR_SIGDUMP
          || data_addr_i == MMADDR_TICKS
+         || data_addr_i == MMADDR_MTIMECMP
+         || data_addr_i == MMADDR_MTIMECMPH
+         || data_addr_i == MMADDR_MTIME
+         || data_addr_i == MMADDR_MTIMEH
          || data_addr_i[31:16] == MMADDR_RNDSTALL))
            else `uvm_fatal(MM_RAM_TAG, $sformatf("out of bounds write to %08x with %08x", data_addr_i, data_wdata_i))
 `endif
@@ -505,6 +550,8 @@ module mm_ram
 `endif
         end else if (select_rdata_q == RND_NUM) begin
             data_rdata_mux = rnd_num;
+        end else if (select_rdata_q == CLINT) begin
+            data_rdata_mux = clint_rdata_q;
         end else if (select_rdata_q == TICKS) begin
             data_rdata_mux = cycle_count_q;
 `ifndef VERILATOR
@@ -534,7 +581,24 @@ module mm_ram
         end
     end
 
-    assign irq_o    = irq_q | sig_platform_q | (rnd_irq << RND_IRQ_ID);
+    // MTIP (mip bit 7) is level-sensitive: asserted while mtime >= mtimecmp.
+    assign mtip     = (mtime_q >= mtimecmp_q);
+    assign irq_o    = irq_q | sig_platform_q | {{24{1'b0}}, mtip, 7'b0} | (rnd_irq << RND_IRQ_ID);
+
+    // CLINT machine timer: free-running mtime; MTIP via mtime/mtimecmp compare.
+    // mtimecmp resets to all-ones so MTIP stays low until a test arms it.
+    always_ff @(posedge clk_i, negedge rst_ni) begin: clint_timer
+        if (~rst_ni) begin
+            mtime_q    <= '0;
+            mtimecmp_q <= '1;
+        end else begin
+            mtime_q <= mtime_q + 64'd1;
+            if (mtime_we_lo)    mtime_q[31:0]     <= clint_wdata;
+            if (mtime_we_hi)    mtime_q[63:32]    <= clint_wdata;
+            if (mtimecmp_we_lo) mtimecmp_q[31:0]  <= clint_wdata;
+            if (mtimecmp_we_hi) mtimecmp_q[63:32] <= clint_wdata;
+        end
+    end
 
     // Sail simple_interrupt_generator platform-register update.
     // Reserved bits ignored; write 0 to stay compatible.
@@ -770,8 +834,10 @@ module mm_ram
     always_ff @(posedge clk_i, negedge rst_ni) begin
         if (~rst_ni) begin
             select_rdata_q <= RAM;
+            clint_rdata_q  <= '0;
         end else begin
             select_rdata_q <= select_rdata_d;
+            clint_rdata_q  <= clint_rdata_d;
         end
     end
 
