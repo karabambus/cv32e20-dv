@@ -311,10 +311,15 @@ certify: verilate
 	SUMMARY="$(VERI_LOG_DIR)/certification_summary.txt"; \
 	echo "RESULT  TEST" > "$$SUMMARY"; \
 	echo "------  ----" >> "$$SUMMARY"; \
-	ROOT="$(certification_PROGRAM_PATH)$(if $(FILTER),/$(FILTER),)"; \
-	ELFS="$$(find -L "$$ROOT" \( -type f -o -type l \) -a \( -iname '*.elf' -o -iname '*.elf32' \) 2>/dev/null | sort)"; \
+	ROOT="$(certification_PROGRAM_PATH)"; \
+	FILT='$(FILTER)'; \
+	if [ -n "$$FILT" ]; then \
+	  ELFS="$$(find -L "$$ROOT" -type d -name "$$FILT" -exec find -L {} \( -type f -o -type l \) -a \( -iname '*.elf' -o -iname '*.elf32' \) \; 2>/dev/null | sort)"; \
+	else \
+	  ELFS="$$(find -L "$$ROOT" \( -type f -o -type l \) -a \( -iname '*.elf' -o -iname '*.elf32' \) 2>/dev/null | sort)"; \
+	fi; \
 	if [ -z "$$ELFS" ]; then \
-	  echo "No .elf files found under $$ROOT"; \
+	  echo "No .elf files found under $$ROOT$${FILT:+ (filter: $$FILT)}"; \
 	  echo "Debug listing (2 levels):"; \
 	  find "$$ROOT" -maxdepth 2 -print || true; \
 	  exit 2; \
