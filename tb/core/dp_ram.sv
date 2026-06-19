@@ -31,11 +31,9 @@ module dp_ram
      input logic                          we_b_i,
      input logic [3:0]                    be_b_i);
 
-    localparam bytes = 2**ADDR_WIDTH;
-
     string                           id = "dp_ram";
 
-    logic [7:0]                      mem[bytes];
+    logic [7:0]                      mem[int];   // the "memory" is modeled as a sparse array
     logic [ADDR_WIDTH-1:0]           addr_a_int;
     logic [ADDR_WIDTH-1:0]           addr_b_int;
 
@@ -51,18 +49,18 @@ module dp_ram
         if (en_b_i) begin
             /* handle writes */
             if (we_b_i) begin
-                if (be_b_i[0]) mem[addr_b_int    ] <= wdata_b_i[ 0+:8];
-                if (be_b_i[1]) mem[addr_b_int + 1] <= wdata_b_i[ 8+:8];
-                if (be_b_i[2]) mem[addr_b_int + 2] <= wdata_b_i[16+:8];
-                if (be_b_i[3]) mem[addr_b_int + 3] <= wdata_b_i[24+:8];
+                if (be_b_i[0]) mem[addr_b_int    ] = wdata_b_i[ 0+:8];
+                if (be_b_i[1]) mem[addr_b_int + 1] = wdata_b_i[ 8+:8];
+                if (be_b_i[2]) mem[addr_b_int + 2] = wdata_b_i[16+:8];
+                if (be_b_i[3]) mem[addr_b_int + 3] = wdata_b_i[24+:8];
             end
             /* handle reads */
             else begin
                 if ($test$plusargs("very_verbose"))
                     $display("[%s] @ %0t: read  addr=0x%08x: data=0x%08x",
-	                     id, $time, addr_b_int,
-                             {mem[addr_b_int + 3], mem[addr_b_int + 2],
-                              mem[addr_b_int + 1], mem[addr_b_int + 0]});
+                        id, $time, addr_b_int,
+                        {mem[addr_b_int + 3], mem[addr_b_int + 2], mem[addr_b_int + 1], mem[addr_b_int + 0]}
+                   );
 
                 rdata_b_o[ 7: 0] <= mem[addr_b_int    ];
                 rdata_b_o[15: 8] <= mem[addr_b_int + 1];
@@ -72,18 +70,19 @@ module dp_ram
         end
     end
 
-    export "DPI-C" function read_byte;
-    export "DPI-C" task write_byte;
+    // TODO: find out if these are used - if not, delete.
+    //export "DPI-C" function read_byte;
+    //export "DPI-C" task write_byte;
 
-    function int read_byte(input logic [ADDR_WIDTH-1:0] byte_addr);
-        read_byte = mem[byte_addr];
-    endfunction
+    //function int read_byte(input logic [ADDR_WIDTH-1:0] byte_addr);
+    //    read_byte = mem[byte_addr];
+    //endfunction
 
-    task write_byte(input logic [ADDR_WIDTH-1:0] byte_addr, logic [7:0] val, output logic [7:0] other);
-        mem[byte_addr] = val;
-        other          = mem[byte_addr];
+    //task write_byte(input logic [ADDR_WIDTH-1:0] byte_addr, logic [7:0] val, output logic [7:0] other);
+    //    mem[byte_addr] = val;
+    //    other          = mem[byte_addr];
 
-    endtask
+    //endtask
 
 endmodule // dp_ram
 

@@ -5,8 +5,13 @@
 .section .data
 .global test_results
 test_results:
-#	.word 000000001
-	.word 000000000
+    .word 000000000
+.global test_passed
+test_passed:
+    .word 123456789
+.global test_failed
+test_failed:
+    .word 1
 
 #TODO: figure out how to move this to the end of the program
 #.section .text

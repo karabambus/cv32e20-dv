@@ -96,7 +96,19 @@ __no_irq_handler:
     li t0, 0
     sw t0, 0(a1)
 	//j __no_irq_handler
-    
+
+    // Deassert the mm_ram timer interrupt source before we re-enable
+    // interrupts on mret.  The fast IRQ line is level-sensitive and the
+    // cve2 core provides no irq_ack, so mm_ram only drops irq_q when the
+    // timer is reprogrammed.  If we leave it asserted, the IRQ re-fires
+    // immediately on mret (before main can deassert it) and is then seen
+    // as unexpected -> _irq_fail.  Mirror generic_irq_handler in
+    // interrupt_test.c: write mask=0, then count=1 so irq_q reloads to 0.
+    li t0, 0x15000000      // TIMER_REG_ADDR
+    sw x0, 0(t0)           //   mask = 0
+    li t1, 1
+    sw t1, 4(t0)           // TIMER_VAL_ADDR: count=1 -> irq_q <= 0 next cycle
+
     // Return
     lw ra, 0(sp)
 	lw a0, 4(sp)

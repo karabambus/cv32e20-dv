@@ -332,7 +332,7 @@ function void uvmt_cv32e20_base_test_c::phase_ended(uvm_phase phase);
 
      // Check exit code if a valid exit code was written to Virtual Peripheral
      if (evalid) begin
-       if (evalue != 0) begin
+       if (evalue != 'd123456789) begin
           `uvm_error("END_OF_TEST", $sformatf("DUT WRAPPER virtual peripheral signaled exit_value=%0h.", evalue))
        end
        else begin

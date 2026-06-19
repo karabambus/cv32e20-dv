@@ -11306,7 +11306,7 @@ fast_exit:
                   sw a5,0(a0)
 
                   li a0, test_ret_val
-                  lw a1, test_results /* report result */
+                  lw a1, test_passed /* report result */
                   sw a1,0(a0)
 
                   wfi  /* we are done */

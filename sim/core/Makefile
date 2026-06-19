@@ -192,8 +192,8 @@ all: clean_all sanity
 ###############################################################################
 # Verilator
 
-# First test if the user wants to to wave dumping. Nobody ever remembers if it's
-# "WAVE" or "WAVES", so will work. We don't support VCD since the files are huge.
+# First test if the user wants to dump waves. Nobody ever remembers if it's
+# "WAVE" or "WAVES", so both will work. We don't support VCD since the files are huge.
 ifneq (${WAVE}, 0)
   WAVES = 1
 endif

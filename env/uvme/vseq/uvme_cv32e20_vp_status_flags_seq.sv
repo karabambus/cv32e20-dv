@@ -26,6 +26,7 @@
 class uvme_cv32e20_vp_status_flags_seq_c extends uvma_obi_memory_vp_base_seq_c;
 
    localparam NUM_WORDS = 2;
+   localparam TEST_PASS = 'd123456789;
 
    uvme_cv32e20_cntxt_c cv32e20_cntxt;
 
@@ -86,29 +87,30 @@ task uvme_cv32e20_vp_status_flags_seq_c::vp_body(uvma_obi_memory_mon_trn_c mon_t
    slv_rsp.err = 1'b0;
 
    if (mon_trn.access_type == UVMA_OBI_MEMORY_ACCESS_WRITE) begin
-      `uvm_info("VP_VSEQ", $sformatf("Call to virtual peripheral 'vp_status_flags':\n%s", mon_trn.sprint()), UVM_DEBUG)
+      `uvm_info("VP_VSEQ", $sformatf("Call to virtual peripheral 'vp_status_flags' transaction:%s", mon_trn.sprint()), UVM_DEBUG)
+      `uvm_info("VP_VSEQ", $sformatf("Call to virtual peripheral 'vp_status_flags'data:%4h", mon_trn.data[31:0]), UVM_DEBUG)
       // get_vp_index() returns the "register number" from a given virtual peripheral.
-      // For example, this virtual peripheral (status flags) has two registers:
-      // 0 : assert pass/fail
       // 1 : return exit_value
       case (get_vp_index(mon_trn))
          0: begin
             // Register (IDX) 0: assert pass/fail
-            cv32e20_cntxt.vp_status_vif.exit_value = mon_trn.data[0];
+            cv32e20_cntxt.vp_status_vif.exit_value = mon_trn.data[31:0];
             cv32e20_cntxt.vp_status_vif.exit_valid = 1;
-            if (mon_trn.data[0] == 0) begin
-               `uvm_info("VP_IDX_0", $sformatf("VP Status Flags: TEST PASSED WITH CODE %h", cv32e20_cntxt.vp_status_vif.exit_value), UVM_NONE)
+            //if (mon_trn.data[31:0] == 'd123456789) begin
+            if (mon_trn.data[31:0] == TEST_PASS) begin
+               `uvm_info("VP_IDX_0", $sformatf("VP Status Flags: TEST PASSED WITH CODE %d", cv32e20_cntxt.vp_status_vif.exit_value), UVM_NONE)
             end
             else begin
-               `uvm_error("VP_IDX_0", $sformatf("VP Status Flags: TEST FAILED WITH CODE %h", cv32e20_cntxt.vp_status_vif.exit_value))
+               `uvm_error("VP_IDX_0", $sformatf("VP Status Flags: TEST FAILED WITH CODE %d", cv32e20_cntxt.vp_status_vif.exit_value))
             end
          end
-         1: begin
-            // Register (IDX) 1: exit_value
-            cv32e20_cntxt.vp_status_vif.exit_value = mon_trn.data[0];
-            cv32e20_cntxt.vp_status_vif.exit_valid = 1;
-            `uvm_info("VP_IDX_1", $sformatf("VP Status Flags: TEST PASSED WITH CODE %h", cv32e20_cntxt.vp_status_vif.exit_value), UVM_NONE)
-         end
+         // TODO: this is out-of-date - remove?
+         //1: begin
+         //   // Register (IDX) 1: exit_value
+         //   cv32e20_cntxt.vp_status_vif.exit_value = mon_trn.data[0];
+         //   cv32e20_cntxt.vp_status_vif.exit_valid = 1;
+         //   `uvm_info("VP_IDX_1", $sformatf("VP Status Flags: TEST PASSED WITH CODE %h", cv32e20_cntxt.vp_status_vif.exit_value), UVM_NONE)
+         //end
          default: begin
             // No VP Status Flags Registers beyond this point.
             `uvm_fatal("VP_IDX_X", $sformatf("VP Status Flags: Unknown VP Register (idx), get_vp_index(mon_trn)"))

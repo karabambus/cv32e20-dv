@@ -33,6 +33,9 @@
 #define EXP_MARCHID   0x00000023
 #define EXP_MIMPID    0x00000000
 
+#define TEST_PASSED  *(volatile int *)0x20000000 = 123456789
+#define TEST_FAILED  *(volatile int *)0x20000000 = 1
+
 int main(int argc, char *argv[])
 {
     unsigned int misa_rval, mvendorid_rval, marchid_rval, mimpid_rval, mxl;
@@ -48,22 +51,26 @@ int main(int argc, char *argv[])
 
     if (mvendorid_rval != EXP_MVENDORID) {
       printf("\tERROR: CSR MVENDORID reads as 0x%x - should be 0x%x for the OpenHW Group.\n\n", mvendorid_rval, EXP_MVENDORID);
-      return EXIT_FAILURE;
+      //return EXIT_FAILURE;
+      TEST_FAILED;
     }
 
     if (misa_rval != EXP_MISA) {
       printf("\tERROR: CSR MISA reads as 0x%x - should be 0x%x for this release of CV32E20!\n\n", misa_rval, EXP_MISA);
-      return EXIT_FAILURE;
+      //return EXIT_FAILURE;
+      TEST_FAILED;
     }
 
     if (marchid_rval != EXP_MARCHID) {
       printf("\tERROR: CSR MARCHID reads as 0x%x - should be 0x%x for CV32E20.\n\n", marchid_rval, EXP_MARCHID);
-      return EXIT_FAILURE;
+      //return EXIT_FAILURE;
+      TEST_FAILED;
     }
 
     if (mimpid_rval != EXP_MIMPID) {
       printf("\tERROR: CSR MIMPID reads as 0x%x - should be 0x%x for this release of CV32E20.\n\n", mimpid_rval, EXP_MIMPID);
-      return EXIT_FAILURE;
+      //return EXIT_FAILURE;
+      TEST_FAILED;
     }
 
     /* Print a banner to stdout and interpret MISA CSR */
@@ -77,7 +84,8 @@ int main(int argc, char *argv[])
     mxl = ((misa_rval & 0xC0000000) >> 30); // MXL == MISA[31:30]
     switch (mxl) {
       case 0:  printf("\tERROR: MXL cannot be zero!\n");
-               return EXIT_FAILURE;
+               //return EXIT_FAILURE;
+               TEST_FAILED;
                break;
       case 1:  printf("\tXLEN is 32-bits\n");
                break;
@@ -86,7 +94,8 @@ int main(int argc, char *argv[])
       case 3:  printf("\tXLEN is 128-bits\n");
                break;
       default: printf("\tERROR: mxl (%0d) not in 0..3, your code is broken!\n", mxl);
-               return EXIT_FAILURE;
+               //return EXIT_FAILURE;
+               TEST_FAILED;
     }
 
     printf("\tSupported Instructions Extensions: ");
@@ -134,10 +143,12 @@ int main(int argc, char *argv[])
     }
     if (reserved) {
       printf("\tERROR: %0d reserved instruction extensions are defined!\n\n", reserved);
-      return EXIT_FAILURE;
+      //return EXIT_FAILURE;
+      TEST_FAILED;
     }
     else {
-      printf("\nEXIT_SUCCESS!\n");
-      return EXIT_SUCCESS;
+      printf("\nTEST PASSED!\n");
+      //return EXIT_SUCCESS;
+      TEST_PASSED;
     }
 }

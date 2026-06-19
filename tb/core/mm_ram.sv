@@ -2,7 +2,7 @@
 //
 // Copyright 2025 OpenHW Foundation
 // SPDX-License-Identifier: Apache-2.0 WITH SHL-0.51
-// 
+//
 // Copyright 2017 Embecosm Limited <www.embecosm.com>
 // Copyright and related rights are licensed under the Solderpad Hardware
 // License, Version 0.51 (the "License"); you may not use this file except in
@@ -26,9 +26,14 @@ module mm_ram
      parameter RAM_ADDR_WIDTH    =  16,
                INSTR_RDATA_WIDTH = 128, // width of read_data on instruction bus
                DATA_RDATA_WIDTH  =  32, // width of read_data on data bus
-               DBG_ADDR_WIDTH    =  14, // POT ammount of memory allocated for debugger
+               IRQ_WIDTH         =  32, // IRQ vector width
+               DBG_ADDR_WIDTH    =  18  // POT amount of memory allocated for debugger
+                                        // 2**18 = 0x40000 covers the full span of the
+                                        // debugger sections (.debugger @0x1A110800 through
+                                        // .debugger_stack ending ~0x1A1400E0, span 0x2F8E0).
+                                        // NOTE: must match the value used by the program
+                                        // loader in tb_top.sv.
                                         // physically located at end of memory
-               IRQ_WIDTH         =  32  // IRQ vector width
   )
   (
      input logic                          clk_i,

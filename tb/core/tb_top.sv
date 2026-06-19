@@ -1,5 +1,5 @@
 // Top level testbench for the CV32E20
-// 
+//
 // Copyright 2025 Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0 WITH SHL-0.51
 //
@@ -19,16 +19,31 @@
 
 `timescale 1ns/100ps
 
-module tb_top
-    #(parameter INSTR_RDATA_WIDTH = 32,
-      parameter RAM_ADDR_WIDTH    = 22,
-      parameter BOOT_ADDR         = 'h4000 // must be 256-byte aligned; raised from 'h2000 to satisfy .align 14 in I-jal test
-     );
+module tb_top;
 
     const int CLK_PHASE_HI        = 5;
     const int CLK_PHASE_LO        = 5;
     const int CLK2NRESET_DELAY    = 1;
     const int RESET_ASSERT_CYCLES = 4;
+
+    // top-level localparams to be passed down to all submodules
+    localparam int          INSTR_RDATA_WIDTH   = 32;
+    localparam int          RAM_ADDR_WIDTH      = 22;
+    localparam int          DBG_ADDR_WIDTH      = 18;
+    // The boot-address of the CVE2 must be 256-byte aligned and must match start of text block in bsp/link.ld
+    // Raised from 'h2000 to satisfy .align 14 in I-jal test (ACT4)
+    localparam logic [31:0] BOOT_ADDR           = 'h4000;
+    // Debugger memory remap parameters.  The debugger sections are linked at
+    // high addresses (.debugger @0x1A11_0800, .debugger_exception/.stack
+    // @0x1A14_0000) that lie far outside the RAM array.  mm_ram remaps run-time
+    // accesses in the window [DM_HALTADDRESS, DM_HALTADDRESS + 2**DBG_ADDR_WIDTH)
+    // to the top of RAM; the program loader below must apply the identical
+    // remap so the loaded image matches what the core fetches/accesses.
+    // NOTE: DM_HALTADDRESS and DBG_ADDR_WIDTH must match mm_ram.
+    // TODO: clean up memory model in testbench to eliminate the need to remap debug memory region.
+    localparam logic [31:0] DM_HALTADDRESS      = 32'h1A11_0800;  // must match .debugger in bsp/link.ld
+    localparam logic [31:0] DM_EXCEPTIONADDRESS = 32'h1A14_0000;  // must match .debugger_exception in bsp/link.ld
+
 
     // clock and reset for tb
     logic                   core_clk;
@@ -59,16 +74,58 @@ module tb_top
         end
     end
 
-    // we either load the provided firmware or execute a small test program that
-    // doesn't do more than an infinite loop with some I/O
+    // Remap a byte address exactly as mm_ram does (see instr_addr_remap and
+    // setup_transaction in mm_ram.sv).  Debug-window addresses are relocated to
+    // the top of RAM; all others are truncated to the RAM array width.
+    // TODO: clean up memory model in testbench to eliminate the need to remap debug memory region.
+    function automatic int unsigned remap_load_addr(input logic [31:0] a);
+        if ((a >= DM_HALTADDRESS) && (a < (DM_HALTADDRESS + (1 << DBG_ADDR_WIDTH))))
+            remap_load_addr = (a - DM_HALTADDRESS) + (1 << RAM_ADDR_WIDTH) - (1 << DBG_ADDR_WIDTH);
+        else
+            remap_load_addr = a & ((1 << RAM_ADDR_WIDTH) - 1);
+    endfunction
+
+    // Load the provided firmware (Verilog-hex from objcopy -O verilog).  A plain
+    // $readmemh cannot be used because it writes the file's absolute addresses
+    // directly into the array and aborts on the out-of-bounds debugger sections.
+    // Instead we parse the hex ourselves and apply the debug-region remap.
     initial begin: load_prog
         automatic string test_program;
-        automatic int prog_size = 6;
+        int          fd;
+        string       tok;
+        logic [31:0] cur_addr;
+        logic [31:0] byte_val;
+        int          n_bytes;
 
         if($value$plusargs("test_program=%s", test_program)) begin
             if($test$plusargs("verbose"))
                 $display("[%s] @ t=%0t: loading test-program %0s", id, $time, test_program);
-            $readmemh(test_program, cv32e20_tb_wrapper_inst.mm_ram_inst.dp_ram_inst.mem);
+
+            fd = $fopen(test_program, "r");
+            if (fd == 0) begin
+                $display("[%s] @ t=%0t: ERROR: cannot open test-program %0s", id, $time, test_program);
+                $fatal(2);
+            end
+
+            cur_addr = '0;
+            n_bytes  = 0;
+            // Read whitespace-separated tokens: "@<hex>" sets the byte address,
+            // every other token is one hex byte written at the (remapped) address.
+            while ($fscanf(fd, "%s", tok) == 1) begin
+                if (tok.getc(0) == "@") begin
+                    void'($sscanf(tok, "@%h", cur_addr));
+                end else begin
+                    void'($sscanf(tok, "%h", byte_val));
+                    cv32e20_tb_wrapper_inst.mm_ram_inst.dp_ram_inst.mem[remap_load_addr(cur_addr)] = byte_val[7:0];
+                    cur_addr = cur_addr + 1;
+                    n_bytes  = n_bytes + 1;
+                end
+            end
+            $fclose(fd);
+
+            if($test$plusargs("verbose"))
+                $display("[%s] @ t=%0t: loaded %0d bytes (debug region remapped to top of RAM)",
+                         id, $time, n_bytes);
         end else begin
             $display("[%s] @ t=%0t: No test_program specified... terminating.", id, $time);
             end_of_sim();
@@ -163,24 +220,25 @@ module tb_top
 
     final begin
         if (wave_file != "") begin
-	    $display("[%s] @ t=%0t: waves written to %s", id, $time, wave_file);
-	end
-	$display("\n[%s] @ t=%0t: Verilator simulation ending...", id, $time);
+            $display("[%s] @ t=%0t: waves written to %s", id, $time, wave_file);
+        end
+        $display("\n[%s] @ t=%0t: Verilator simulation ending...", id, $time);
     end
 
     // wrapper for cv32e20, the memory and virtual peripherals.
     cv32e20_tb_wrapper
         #(
           // Parameters used by TB
-          .INSTR_RDATA_WIDTH (INSTR_RDATA_WIDTH),
-          .RAM_ADDR_WIDTH    (RAM_ADDR_WIDTH),
-          .BOOT_ADDR         (BOOT_ADDR),
-          .DM_HALTADDRESS    (32'h1A11_0800),
+          .INSTR_RDATA_WIDTH   (INSTR_RDATA_WIDTH),
+          .RAM_ADDR_WIDTH      (RAM_ADDR_WIDTH),
           // Parameters used by DUT
-          .MHPMCounterNum    (10),
-          .MHPMCounterWidth  (40),
-          .RV32E             (1'b0),
-          .RV32M             (2/*RV32MFast*/)
+          .BOOT_ADDR           (BOOT_ADDR),
+          .DM_HALTADDRESS      (DM_HALTADDRESS),
+          .DM_EXCEPTIONADDRESS (DM_EXCEPTIONADDRESS),
+          .MHPMCounterNum      (10),
+          .MHPMCounterWidth    (40),
+          .RV32E               (1'b0),
+          .RV32M               (2/*RV32MFast*/)
          )
     cv32e20_tb_wrapper_inst
         (
