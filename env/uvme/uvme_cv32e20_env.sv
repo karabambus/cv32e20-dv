@@ -191,6 +191,16 @@ function void uvme_cv32e20_env_c::build_phase(uvm_phase phase);
 
       $value$plusargs("scoreboard_enable=%0h", cfg.scoreboard_enabled);
 
+      // The RVFI scoreboard pushes one transaction per retired instruction into
+      // its core/reference_model queues but only drains them when +USE_ISS is set.
+      // Building the scoreboard without +USE_ISS therefore grows those queues
+      // unbounded (a memory leak, very evident under DSim).
+      // To prevent this, we disable the scoreboard here if +USE_ISS is not set.
+      if (cfg.scoreboard_enabled && !$test$plusargs("USE_ISS")) begin
+         `uvm_info("UVME_CV32E20_ENV", "Disabling RVFI scoreboard because +USE_ISS not set.", UVM_LOW)
+         cfg.scoreboard_enabled = 0;
+      end
+
       retrieve_vifs        ();
       assign_cfg           ();
       assign_cntxt         ();
