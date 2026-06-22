@@ -114,7 +114,7 @@ module cv32e20_tb_wrapper
          .irq_timer_i            ( irq_from_mm_ram[7]    ),
          .irq_external_i         ( irq_from_mm_ram[11]   ),
          .irq_fast_i             ( irq_from_mm_ram[31:16]),
-         .irq_nm_i               (  1'b0                 ),       // non-maskeable interrupt
+         .irq_nm_i               ( 1'b0                  ), // TODO: non-maskeable interrupt
 
          .debug_req_i            ( debug_req             ),
          .dm_halt_addr_i         ( DM_HALTADDRESS        ),

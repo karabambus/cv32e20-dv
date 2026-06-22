@@ -47,6 +47,7 @@ module uvmt_cv32e20_dut_wrap #(
                             uvma_interrupt_if            interrupt_if,
                             // vp_status_if is driven by ENV and used in TB
                             uvma_interrupt_if            vp_interrupt_if,
+                            uvma_debug_if                debug_if,
                             uvme_cv32e20_core_cntrl_if   core_cntrl_if,
                             uvmt_cv32e20_core_status_if  core_status_if,
                             uvma_obi_memory_if           obi_memory_instr_if,
@@ -173,17 +174,17 @@ module uvmt_cv32e20_dut_wrap #(
          .x_result_i             ( '0                             ),
 
   // Interrupt inputs
-         .irq_software_i         ( 1'b0/*irq_uvma[3]*/),
-         .irq_timer_i            ( 1'b0/*irq_uvma[7]*/),
-         .irq_external_i         ( 1'b0/*irq_uvma[11]*/),
-         .irq_fast_i             ( 16'h0000/*irq_uvma[31:16]*/),
-         .irq_nm_i               ( 1'b0/*irq_uvma[0]*/),       // non-maskeable interrupt
+         .irq_software_i         ( irq_uvma[3]                    ),
+         .irq_timer_i            ( irq_uvma[7]                    ),
+         .irq_external_i         ( irq_uvma[11]                   ),
+         .irq_fast_i             ( irq_uvma[31:16]                ),
+         .irq_nm_i               ( 1'b0 /*irq_uvma[0]*/           ), // TODO: non-maskeable interrupt
 
   // Debug Interface
-         .debug_req_i             ( 1'b0/*debug_req_uvma*/),
+         .debug_req_i             ( debug_req_uvma ),
          .debug_halted_o          (),
-         .dm_halt_addr_i          ( 32'h1A11_0800 ),
-         .dm_exception_addr_i     ( 32'h1A14_0000 ),
+         .dm_halt_addr_i          ( 32'h1A11_0800  ),
+         .dm_exception_addr_i     ( 32'h1A14_0000  ),
          .crash_dump_o            (),
 
   // RISC-V Formal Interface
