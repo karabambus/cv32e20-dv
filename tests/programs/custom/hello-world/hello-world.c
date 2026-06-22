@@ -29,7 +29,7 @@
 
 // MVENDORID CSR: 0x602 is the value assigned by JEDEC to the OpenHW Group
 #define EXP_MVENDORID 0x00000602
-#define EXP_MISA      0x40101104
+#define EXP_MISA      0x40001104
 #define EXP_MARCHID   0x00000023
 #define EXP_MIMPID    0x00000000
 
@@ -56,6 +56,7 @@ int main(int argc, char *argv[])
 
     if (misa_rval != EXP_MISA) {
       printf("\tERROR: CSR MISA reads as 0x%x - should be 0x%x for this release of CV32E20!\n\n", misa_rval, EXP_MISA);
+      TEST_FAILED;
     }
 
     if (marchid_rval != EXP_MARCHID) {

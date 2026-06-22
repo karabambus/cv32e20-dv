@@ -252,9 +252,17 @@ cont_illegal_insn:
     //clear glb_expect_illegal_insn
     sw x0, 0(a0)
 	//indicate that this was expected...
+    // During Test 18 single-step we step through this handler one instruction
+    // at a time; the puts() -> newlib loop is catastrophically slow. Skip the
+    // message during Test 18 only (hart_status==18) to stay within maxcycles.
+    la t1, glb_hart_status
+    lw t1, 0(t1)
+    li t2, 18
+    beq t1, t2, skip_illegal_puts
     la a0, expected_illegal_insn_msg
     jal ra, puts
-    //increment hart status     
+skip_illegal_puts:
+    //increment hart status
     la a0, glb_illegal_insn_status  
     lw t0, 0(a0)
     addi t0,t0,1

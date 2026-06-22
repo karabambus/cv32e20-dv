@@ -291,14 +291,14 @@ int main(int argc, char *argv[])
 
     printf("        - Trigger TDATA1 read check\n");
     __asm__ volatile("csrr %0, 0x7a1"   : "=r"(temp)); // Trigger TDATA1
-    // TBC: does CV32E20 support matching in User Mode?
+    // CV32E20 is M-only (PVL-20), so the trigger u(ser) bit reads 0.
     //   31:28 type      = 2
     //      27 dmode     = 1
     //   15:12 action    = 1
     //      6  m(achine) = 1
-    //      3  u(ser)    = 1
-    if(temp !=  (2<<28 | 1<<27 | 1<<12 | 1<<6 | 1<<3)) {
-        printf(": ERROR!  Expected 0x2800_1048\n");
+    //      3  u(ser)    = 0
+    if(temp !=  (2<<28 | 1<<27 | 1<<12 | 1<<6)) {
+        printf(": ERROR!  Expected 0x2800_1040\n");
         TEST_FAILED;
     }
 
@@ -543,24 +543,17 @@ int main(int argc, char *argv[])
     }
     check_debug_status(121, glb_hart_status);
 
-    // NOTE: Tests 18-24 (single-step, irq-in-debug, fence-in-debug, triggers)
-    // are SKIPPED for now.  They were written against cv32e40p semantics and
-    // need porting to CV32E20, which implements U-mode and writes the faulting
-    // instruction into mtval on illegal-instruction exceptions.  Deferred
-    // pending CV32E20 debug-feature updates (incl. possible U-mode deprecation).
-    // The suite currently passes Tests 1-17 and 21.
-    printf("\n\nTests 18-24 skipped (pending CV32E20 debug-feature port) - ending here.\n\n");
-    TEST_PASSED;
-
     printf("------------------------\n");
     printf("Test 18: Single stepping\n");
     glb_hart_status = 18;
+    // Single step code generates 2 illegal insn (csrr dcsr + dret).  Capture the
+    // cumulative count before stepping so the check is robust to prior tests'
+    // counts (the original used an unrelated scratch variable).
+    temp1 = glb_illegal_insn_status + 2;
     // Run single step code (in single_step.S)
     _single_step(0);
 
-    // Single step code should generate 2 illegal insn
-    temp1++;
-    check_illegal_insn_status("Test 18", temp1++);
+    check_illegal_insn_status("Test 18", temp1);
     check_debug_status(118, glb_hart_status);
 
     printf("Stepped %d times\n", glb_step_count);
@@ -637,5 +630,7 @@ int main(int argc, char *argv[])
     //return EXIT_FAILURE;
     printf("------------------------\n");
     printf("Finished \n");
+    // Reached the natural end with no check having failed -> signal pass.
+    TEST_PASSED;
     return EXIT_SUCCESS;
 }
