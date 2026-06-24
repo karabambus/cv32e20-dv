@@ -297,8 +297,11 @@ int main(int argc, char *argv[])
     //   15:12 action    = 1
     //      6  m(achine) = 1
     //      3  u(ser)    = 0
-    if(temp !=  (2<<28 | 1<<27 | 1<<12 | 1<<6)) {
-        printf(": ERROR!  Expected 0x2800_1040\n");
+    const unsigned int expected_tdata1 = (2<<28 | 1<<27 | 1<<12 | 1<<6);
+    if(temp !=  expected_tdata1) {
+        printf("ERROR!  Expected 0x%04x_%04x, got 0x%04x_%04x\n",
+                expected_tdata1 >> 16, expected_tdata1 & 0xff,
+                temp >> 16,            temp & 0xff);
         TEST_FAILED;
     }
 
