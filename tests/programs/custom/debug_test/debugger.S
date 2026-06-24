@@ -115,13 +115,11 @@ _debugger_start:
     li t0, 24
     beq t2, t0, _debugger_trigger_regs_access
 _debugger_trigger_regs_access:
-    # R/W trigger regs otherwise not accessed
-    # to close coverage holes
-    li t0, 0xff
-    csrw 0x7a4, t0 # tinfo
-    csrr t0, 0x7a4
-    li t1, 4
-    bne t0, t1, _debugger_fail
+    # R/W trigger regs otherwise not accessed to close coverage holes.
+    # NOTE: tinfo (0x7a4) is NOT implemented on CV32E20 (absent from the CSR
+    # map), so any access raises an illegal instruction - Test 2.x already
+    # verifies that.  The original cv32e40p tinfo write/read (expect 4) is
+    # removed here.
     li t0, 0xff
     csrw 0x7a3, t0 # tdata3
     csrr t0, 0x7a3
@@ -219,7 +217,7 @@ _debugger_single_step_enable:
     li t1, 4<<28 | 1<<15 | 1<<6 | 3<<0
     bne t0, t1, _debugger_fail
     // Enable step bit in dcsr
-    li t0, 4<<28 | 1<<15 | 1<<2 
+    li t0, 4<<28 | 1<<15 | 1<<2
     csrw dcsr, t0
     // ebreak used to enter single step test, incr dpc
     csrr t0, dpc
@@ -331,12 +329,15 @@ _inc_dpc_ebreak:
 _debugger_single_step_ebreak_exception:
     j _debugger_single_step_end
 _debugger_single_step_cebreak_exception:
-    #  depc != 0 => we have passed the first
-    # instruction of the handler, and we can
-    # set dcsr.ebreakm again
-    csrr t0, dpc
-    bne t0, x0, _end
-    
+    # ebreakm was turned off (step_info==8) so this c.ebreak takes a breakpoint
+    # exception.  Restore ebreakm once the ebreak handler has actually run, so
+    # the following sub-tests see ebreakm=1.
+    # NOTE: the original gate (dpc==0) never holds on CV32E20 (dpc is always the
+    # handler address), so ebreakm was never restored.  Use the handler-run
+    # signal instead: handle_ebreak clears glb_expect_ebreak_handler.
+    la t0, glb_expect_ebreak_handler
+    lw t0, 0(t0)
+    bne t0, x0, _end          # handler not yet run -> keep ebreakm off
     li t1, 4<<28 | 1<<15 | 1<<6 | 1<<2 | 3<<0
     csrw dcsr, t1
 _end:
@@ -346,9 +347,11 @@ _debugger_single_step_basic:
     li t1, 4<<28 | 1<<15 | 2<<6 | 1<<2 | 3<<0
     csrr t2, dcsr
     beq t1, t2, _debugger_step_trig_entry
-    // Ensure tval (0x343) always == 0
-    csrr t1, 0x343
-    bne x0, t1, _debugger_fail
+    // NOTE: the original cv32e40p test asserted mtval (0x343) == 0 here.
+    // CV32E20 writes the faulting instruction into mtval on illegal-insn
+    // exceptions and mtval is sticky, so after the step_info==3 illegal
+    // instructions it is legitimately non-zero for all later steps.  The
+    // mtval==0 assertion is invalid on CV32E20 and has been removed.
 //            ebreakm   step  stepen
     li t1, 4<<28 | 1<<15 | 4<<6 | 1<<2 | 3<<0
     bne t1, t2, _debugger_fail
@@ -460,8 +463,8 @@ _debugger_csr:
     //      27 dmode     = 1
     //   15:12 action    = 1
     //      6  m(achine) = 1
-    //      3  u(ser)    = 1
-    li   t1, 2<<28 | 1<<27 | 1<<12 | 1<<6 | 1<<3
+    //      3  u(ser)    = 0 (M-only)
+    li   t1, 2<<28 | 1<<27 | 1<<12 | 1<<6
     csrr t2,tdata1
     bne  t1,t2,_debugger_fail
     csrr t2,tselect

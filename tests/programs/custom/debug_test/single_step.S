@@ -96,6 +96,13 @@ _step_trig_exit:
     // loading of t0 to 1, and t0 should be of value 2
     bne t0, t1, _single_step_fail
 
+    // CV32E20 does NOT implement dcsr.stepie (bit 11 reads 0; the CV32E20 dcsr
+    // spec lists the implemented fields and states "Other bit fields read as
+    // zero").  Interrupts are therefore always masked during single-step, so
+    // the stepie=1/0 sub-tests (step_info 5 & 6) exercise interrupt-enabled
+    // single-stepping, which is unimplemented.  Skip them here; the code is
+    // preserved below for the separate stepie-feature review.
+    j _skip_stepie_tests
 
     //-----------------
     // Stepping with interrupt, stepie=1
@@ -154,6 +161,7 @@ _irq_wait_loop:
     nop
     nop
 
+_skip_stepie_tests:
     # set step reason to 7 (step with c.ebreak)
     la a1, glb_step_info
     li t0, 7

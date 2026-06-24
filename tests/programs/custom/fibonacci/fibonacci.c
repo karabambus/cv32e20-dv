@@ -19,6 +19,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define TEST_PASSED  *(volatile int *)0x20000000 = 123456789
+#define TEST_FAILED  *(volatile int *)0x20000000 = 1
+
 static int fib(int i) {
     return (i>1) ? fib(i-1) + fib(i-2) : i;
 }
@@ -26,7 +29,7 @@ static int fib(int i) {
 int main(int argc, char *argv[]) {
 
     int i;
-    int num = (argc >= 2) ? atoi((const char *)argv[1]) : 15;
+    int num = (argc >= 2) ? atoi((const char *)argv[1]) : 16;
 
     printf("starting fib(%d)...\n", num);
 
@@ -35,6 +38,8 @@ int main(int argc, char *argv[]) {
     }
 
     printf("finishing...\n");
+
+    TEST_PASSED;
 
     return 0;
 }
