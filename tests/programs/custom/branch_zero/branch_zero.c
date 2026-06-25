@@ -3,11 +3,7 @@
 #include <stdint.h>
 #include <time.h>
 
-#define TEST_PASSED  *(volatile int *)0x20000000 = 123456789
-#define TEST_FAILED  *(volatile int *)0x20000000 = 1
-
-#define TIMER_REG_ADDR         ((volatile uint32_t *) 0x15000000)
-#define TIMER_VAL_ADDR         ((volatile uint32_t *) 0x15000004)
+#include "cv32e20_dv.h"
 
 void mm_ram_assert_irq(uint32_t mask, uint32_t cycle_delay) {
     *TIMER_REG_ADDR = mask;
@@ -36,24 +32,26 @@ void enable_interrupts() {
 void m_fast0_irq_handler(void) {
     __asm__ volatile (
         "addi x18, x18, 1\n"      /* break the branch-taken loop          */
-        "li   t0, 0x15000000\n"
+        "li   t0, %0\n"           /* t0 = MM_TIMER_CTRL_ADDR               */
         "sw   x0, 0(t0)\n"        /* TIMER_REG = 0  (mask cleared)         */
+        "li   t0, %1\n"           /* t0 = MM_TIMER_VAL_ADDR                */
         "li   t1, 1\n"
-        "sw   t1, 4(t0)\n"        /* TIMER_VAL = 1  -> deassert irq line   */
+        "sw   t1, 0(t0)\n"        /* TIMER_VAL = 1  -> deassert irq line   */
         "mret\n"
-        ::: "t0", "t1", "memory"
+        :: "i"(MM_TIMER_CTRL_ADDR), "i"(MM_TIMER_VAL_ADDR) : "t0", "t1", "memory"
     );
 }
 
 void m_fast1_irq_handler(void) {
     __asm__ volatile (
         "addi x15, x15, 1\n"
-        "li   t0, 0x15000000\n"
+        "li   t0, %0\n"           /* t0 = MM_TIMER_CTRL_ADDR               */
         "sw   x0, 0(t0)\n"
+        "li   t0, %1\n"           /* t0 = MM_TIMER_VAL_ADDR                */
         "li   t1, 1\n"
-        "sw   t1, 4(t0)\n"
+        "sw   t1, 0(t0)\n"
         "mret\n"
-        ::: "t0", "t1", "memory"
+        :: "i"(MM_TIMER_CTRL_ADDR), "i"(MM_TIMER_VAL_ADDR) : "t0", "t1", "memory"
     );
 }
 

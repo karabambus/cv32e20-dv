@@ -5,9 +5,6 @@
 
 #include "interrupt_test.h"
 
-#define TEST_PASSED  *(volatile int *)0x20000000 = 123456789
-#define TEST_FAILED  *(volatile int *)0x20000000 = 1
-
 // mtvec is bootstrapped from the core boot address at reset (CV32E20 initialises
 // the trap-vector base to the boot address). The core Verilator TB boots at
 // 0x4000 (tb_top.sv BOOT_ADDR / link.ld __boot_address), so mtvec reads back as

@@ -17,8 +17,7 @@
 #include <strings.h>
 #include <stdint.h>
 
-#define TEST_PASSED  *(volatile int *)0x20000000 = 123456789
-#define TEST_FAILED  *(volatile int *)0x20000000 = 1
+#include "cv32e20_dv.h"
 
 typedef unsigned char          u8;
 typedef unsigned short         u16;

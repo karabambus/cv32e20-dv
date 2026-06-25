@@ -33,14 +33,11 @@
 #include <stdio.h>
 #include "custom_handlers.h"
 #include "riscv_csr_test_0.h"
+#include "cv32e20_dv.h"
 
 volatile int glb_expect_illegal_insn    = 0;
 volatile int glb_fail_count             = 0;
 volatile int  glb_csr_address = 0;
-
-
-#define TEST_FAILED  *(volatile int*)(0x20000000) = 2
-#define TEST_PASSED  *(volatile int*)(0x20000000) = 123456789
 
 /* Failure entry point invoked from custom_handlers.S (csr_fail_loop) when an
  * unexpected exception/mismatch occurs.  Signals failure to the testbench. */

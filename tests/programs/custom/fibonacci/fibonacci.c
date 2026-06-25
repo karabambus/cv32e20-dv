@@ -19,8 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define TEST_PASSED  *(volatile int *)0x20000000 = 123456789
-#define TEST_FAILED  *(volatile int *)0x20000000 = 1
+#include "cv32e20_dv.h"
 
 static int fib(int i) {
     return (i>1) ? fib(i-1) + fib(i-2) : i;

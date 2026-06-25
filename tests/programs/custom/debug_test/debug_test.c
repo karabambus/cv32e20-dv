@@ -53,8 +53,7 @@ volatile int glb_minstret_end = 0;
 // generic loop counter
 volatile int wait_cnt = 0;
 
-#define TEST_PASSED  *(volatile int *)0x20000000 = 123456789
-#define TEST_FAILED  *(volatile int *)0x20000000 = 1
+#include "cv32e20_dv.h"
 
 extern int __stack_start;
 typedef union {
@@ -68,9 +67,6 @@ typedef union {
   } fields;
   unsigned int bits;
 }  debug_req_control_t;
-#define DEBUG_REQ_CONTROL_REG *(volatile int *)0x15000008
-#define TIMER_REG_ADDR         ((volatile uint32_t *) 0x15000000)
-#define TIMER_VAL_ADDR         ((volatile uint32_t *) 0x15000004)
 typedef union {
   struct {
     unsigned int uie   : 1;  //     0 // Implemented if USER mode enabled

@@ -43,8 +43,7 @@ volatile int glb_mcycle_start = 0;
 volatile int glb_mcycle_end = 0;
 volatile int glb_minstret_start = 0;
 volatile int glb_minstret_end = 0;
-#define TEST_FAILED  *(volatile int *)0x20000000 = 2
-#define TEST_PASSED  *(volatile int *)0x20000000 = 1
+#include "cv32e20_dv.h"
 
 extern int __stack_start;
 extern int _trigger_code;
@@ -64,10 +63,6 @@ typedef union {
   } fields;
   unsigned int bits;
 }  debug_req_control_t;
-
-#define DEBUG_REQ_CONTROL_REG *(volatile int *)0x15000008
-#define TIMER_REG_ADDR         ((volatile uint32_t *) 0x15000000)
-#define TIMER_VAL_ADDR         ((volatile uint32_t *) 0x15000004)
 
 typedef union {
   struct {

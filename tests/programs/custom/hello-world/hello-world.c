@@ -33,8 +33,7 @@
 #define EXP_MARCHID   0x00000023
 #define EXP_MIMPID    0x00000000
 
-#define TEST_PASSED  *(volatile int *)0x20000000 = 123456789
-#define TEST_FAILED  *(volatile int *)0x20000000 = 1
+#include "cv32e20_dv.h"
 
 int main(int argc, char *argv[])
 {

@@ -37,8 +37,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define TEST_PASSED  *(volatile int *)0x20000000 = 123456789
-#define TEST_FAILED  *(volatile int *)0x20000000 = 1
+#include "cv32e20_dv.h"
 
 #define MHPM_NUM 10   /* CV32E20: mhpmcounter3..12 implemented */
 

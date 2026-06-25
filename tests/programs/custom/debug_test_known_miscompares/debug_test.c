@@ -34,8 +34,7 @@ volatile int glb_expect_ebreak_handler = 0;
 volatile int glb_expect_irq_entry = 0;
 volatile int glb_exception_ebreak_status = 0;
 volatile int glb_ebreak_status = 0;
-#define TEST_PASSED  *(volatile int *)0x20000000 = 1
-#define TEST_FAILED  *(volatile int *)0x20000000 = 2
+#include "cv32e20_dv.h"
 
 extern int __stack_start;
 extern void _single_step(int d);
@@ -50,8 +49,6 @@ typedef union {
   } fields;
   unsigned int bits;
 }  debug_req_control_t;
-
-#define DEBUG_REQ_CONTROL_REG *(volatile int *)0x15000008
 
 
 // Tag is simply to help debug and determine where the failure came from

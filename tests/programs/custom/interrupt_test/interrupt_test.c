@@ -12,9 +12,6 @@
 #include "rand.h"
 #include "interrupt_test.h"
 
-#define TEST_PASSED  *(volatile int *)0x20000000 = 123456789
-#define TEST_FAILED  *(volatile int *)0x20000000 = 1
-
 volatile uint32_t irq_id                  = 0;
 volatile uint32_t irq_id_q[IRQ_NUM];
 volatile uint32_t irq_id_q_ptr            = 0;

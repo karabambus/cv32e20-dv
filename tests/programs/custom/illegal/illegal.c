@@ -17,8 +17,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#define TEST_PASSED  *(volatile int *)0x20000000 = 123456789
-#define TEST_FAILED  *(volatile int *)0x20000000 = 1
+#include "cv32e20_dv.h"
 
 /* 0xFFFFFFFF: opcode 0x7F is reserved -> illegal; low bits 0b11 -> full 32-bit,
  * so the handler skips exactly 4 bytes and resumes on the csrr instructions. */

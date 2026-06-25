@@ -1,3 +1,8 @@
+<!--
+Copyright 2026 Eclipse Foundation AISBL
+SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
+-->
+
 # CV32E20 C test-program cleanup
 
 Tracking doc for the cleanup of the C test-programs under `tests/programs/custom`.
@@ -19,6 +24,15 @@ FAILURE* (`uvm_error`). So:
 
 Tests that `#define TEST_PASSED ...= 1` are **broken** (they report FAIL on
 success) and must be corrected.
+
+**Shared header (`bsp/cv32e20_dv.h`).** The canonical `TEST_PASSED`/`TEST_FAILED`
+macros and every memory-mapped virtual-peripheral register (`MM_*` plus the
+back-compat `TIMER_REG_ADDR`/`TIMER_VAL_ADDR`/`DEBUG_REQ_CONTROL_REG`) now live
+in a single header, `bsp/cv32e20_dv.h`, mirroring the authoritative decode in
+`tb/core/mm_ram.sv`. Every C test program includes it (directly, or via
+`interrupt_test.h`); `bsp/` is on the compile include path (`-I $(BSP)` in
+`mk/Common.mk`). Per-test local copies of these macros have been removed — add
+new memory-mapped registers to the header, not to individual tests.
 
 ## CV32E20 capability reference (per docs + PVL-20)
 
@@ -146,3 +160,41 @@ debug_test_trigger — UVM-environment tests needing features the core Verilator
 TB lacks (debug-at-reset plusargs, ISS step-compare, per-test plusargs). All
 fail to build; debug is already covered in the core TB by main debug_test.
 Revisit in `sim/uvmt`, not `sim/core`.
+
+## Shared test-program header — `bsp/cv32e20_dv.h` (DONE this session)
+
+Single source of truth for the pass/fail protocol **and** every memory-mapped
+virtual-peripheral register, mirroring the authoritative decode in
+`tb/core/mm_ram.sv`. Reachable from any test via `#include "cv32e20_dv.h"`
+because `mk/Common.mk` compiles programs (both `.c` and `.S`) with `-I $(BSP)`.
+
+Contents: canonical `TEST_PASSED`(=123456789)/`TEST_FAILED`(=1) +
+`TEST_RESULT_PASS/_FAIL`; the full map as `MM_*_ADDR` constants and `MM_*_REG`
+lvalue accessors (PRINT, TESTSTATUS, EXIT, SIG{BEGIN,END,DUMP}, TIMER_CTRL/VAL,
+DEBUG_CTRL, SIG_VERSION/PLATFORM, RNDNUM, TICKS, CLINT MTIME(H)/MTIMECMP(H));
+back-compat names `TIMER_REG_ADDR`, `TIMER_VAL_ADDR`, `DEBUG_REQ_CONTROL_REG`.
+
+Migration done (all 18 C sources under `tests/programs/custom`): per-test local
+`#define`s removed; `interrupt_test.c`/`interrupt_bootstrap.c` get it via
+`interrupt_test.h`; `coremark/core_main.c` raw status writes → `TEST_PASSED;`/
+`TEST_FAILED;`. Per user decision, the 3 previously non-canonical tests were
+moved to canonical values: `riscv_csr` (was FAILED=2), `debug_test_trigger` and
+`debug_test_known_miscompares` (were PASSED=1/FAILED=2). `branch_zero.c`'s two
+inline-asm IRQ handlers are now fully macro-driven — `MM_TIMER_CTRL_ADDR`/
+`MM_TIMER_VAL_ADDR` passed as `"i"` immediates (no extra register, so the
+"only t0/t1 dead in the tight loop" invariant holds), no hardcoded addresses.
+
+Verified: fibonacci, branch_zero, interrupt_test, coremark, all_csr_por all run
+**ALL TESTS PASSED**; parked tests (riscv_csr, debug_test*, debug_test) pass a
+`-fsyntax-only` compile (no errors, no macro redefinitions).
+
+REMAINING (future, when extending beyond C): the `.S`/asm tests still use
+`tests/asm/user_define.h` (assembly syntax: `.set`/`.section`/`.word`, not C
+macros). To unify those too, either factor the addresses into an
+`#ifdef __ASSEMBLER__` section of a shared header or keep a parallel asm include
+— not done; this session was scoped to the C test-programs only.
+
+Untracked/working-tree only (cannot commit): `bsp/cv32e20_dv.h` is **new and
+untracked** — stage it before any `git clean`. `interrupt_test/rand.h` and this
+`CLEANUP.md` were committed earlier (1a93ab2) and given SPDX headers this
+session.
