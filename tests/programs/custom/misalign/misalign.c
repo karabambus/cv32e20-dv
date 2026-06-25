@@ -1,103 +1,103 @@
+/*
+** Misaligned load/store directed test (CV32E20).
+**
+** The CV32E20 LSU handles misaligned memory accesses in hardware by splitting
+** them into multiple naturally-aligned transactions (CV32E20 Load-Store Unit
+** reference: "at least two cycles are needed for misaligned loads and stores").
+** There is NO misaligned-access exception (no exception code 4/6).
+**
+** A source buffer is filled with a known byte pattern (byte k == k), so the
+** value of any u16/u32/u64 read at byte offset o is deterministic regardless of
+** alignment.  This test verifies misaligned loads return the correct value and
+** misaligned stores round-trip correctly.
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
+#include <stdint.h>
 
-//#include "../../../core/custom/startup/support.h"
-#include "./support.h"
-
-/*
- * Possible misaligned scenarios for 32 bit bus
- *
- * 1 byte access
- *   - Never
- *
- * 2 byte access
- *   - Address & 0x1
- *   if 0x3, then 2 read32()
- *
- * 4 byte access
- *   - (Address & 0x1) | (Address & 0x2)
- *   then 2 read32()
- *
- * 8 byte access
- *   - (Address & 0x1) | (Address & 0x2) | (Address & 0x4)
- *   then 3 read32()
- *
- */
+#define TEST_PASSED  *(volatile int *)0x20000000 = 123456789
+#define TEST_FAILED  *(volatile int *)0x20000000 = 1
 
 typedef unsigned char          u8;
 typedef unsigned short         u16;
 typedef unsigned int           u32;
 typedef unsigned long long int u64;
 
-// 64 bit printf fmt does not work
-// use a union and print as 2x32bit
-union {
-    u32 u32v[2];
-    u64 u64v;
-} u64_32;
+static int err_cnt = 0;
 
-int main () {
-    printf("Hello World\n");
-    printf("Test misaligned load/store\n");
+static u64 expected_u64(u8 *base, int off, int nbytes)
+{
+    u64 v = 0;
+    for (int k = 0; k < nbytes; k++)
+        v |= ((u64)base[off + k]) << (8 * k);
+    return v;
+}
 
-    u64 u64Load[4];    // 32 bytes
-    u64 u64Store[4];   // 32 bytes
-    u8  *pLoad  = (u8 *) u64Load;
-    u8  *pStore = (u8 *) u64Store;
-
-    u32 i;
-    for (i=0; i<32; i++) {
-        *(pLoad+i) = i;
+static void chk64(const char *what, int off, u64 got, u64 exp)
+{
+    if (got != exp) {
+        printf("FAIL %s off=%d got=%08x%08x exp=%08x%08x\n", what, off,
+               (u32)(got >> 32), (u32)got, (u32)(exp >> 32), (u32)exp);
+        err_cnt++;
     }
-    u8  *cpa;
-    u16 *spa;
-    u32 *ipa;
-    u64 *lpa;
+}
 
-    // Load Test
-    cpa = pLoad;
-    for (i=0; i<16; i++) {
-        spa = (u16 *) cpa;
-        ipa = (u32 *) cpa;
-        lpa = (u64 *) cpa;
+int main(void)
+{
+    printf("Misaligned load/store directed test\n");
 
-        printf("\n");
-        printf("Store Index=%d off=%d\n", i, i%4);
-        printf("  (u8  *) =               %02X\n", *cpa);
-        printf("  (u16 *) =             %04X\n",   *spa);
-        printf("  (u32 *) =         %08X\n",       *ipa);
+    /* 32-byte source filled with byte k == k. */
+    u64 srcbuf[4];
+    u64 dstbuf[4];
+    u8 *src = (u8 *)srcbuf;
+    u8 *dst = (u8 *)dstbuf;
+    for (int i = 0; i < 32; i++)
+        src[i] = (u8)i;
 
-        u64_32.u64v = *lpa;
-        printf("  (u64 *) = %08X%08X\n",           u64_32.u32v[1], u64_32.u32v[0]);
+    //////////////////////////////////////////////////////////////
+    // Misaligned LOADS at every byte offset 0..15.
+    for (int o = 0; o < 16; o++) {
+        u16 g16 = *(u16 *)(src + o);
+        chk64("load16", o, g16, expected_u64(src, o, 2));
 
-        cpa++;
-    }
+        u32 g32 = *(u32 *)(src + o);
+        chk64("load32", o, g32, expected_u64(src, o, 4));
 
-    // Store Test
-    cpa = pStore;
-    for (i=0; i<16; i++) {
-        spa = (u16 *) cpa;
-        ipa = (u32 *) cpa;
-        lpa = (u64 *) cpa;
-
-        printf("\n");
-        printf("Load Index=%d off=%d\n", i, i%4);
-
-        bzero(cpa, 32);
-        *spa = *(u16 *)(pLoad + i);
-        printf("  (u16 *) =             %04X\n", *spa);
-
-        bzero(cpa, 32);
-        *ipa = *(u32 *)(pLoad + i);
-        printf("  (u32 *) =         %08X\n",     *ipa);
-
-        bzero(cpa, 32);
-        *lpa = *(u64 *)(pLoad + i);
-        u64_32.u64v = *lpa;
-        printf("  (u64 *) = %08X%08X\n",         u64_32.u32v[1], u64_32.u32v[0]);
-
-        cpa++;
+        u64 g64 = *(u64 *)(src + o);
+        chk64("load64", o, g64, expected_u64(src, o, 8));
     }
 
+    //////////////////////////////////////////////////////////////
+    // Misaligned STORES at every byte offset 0..15: store then read back
+    // (both misaligned) and confirm the value round-trips.
+    for (int o = 0; o < 16; o++) {
+        u16 s16 = *(u16 *)(src + o);
+        bzero(dst, 32);
+        *(u16 *)(dst + o) = s16;
+        chk64("store16", o, *(u16 *)(dst + o), s16);
+
+        u32 s32 = *(u32 *)(src + o);
+        bzero(dst, 32);
+        *(u32 *)(dst + o) = s32;
+        chk64("store32", o, *(u32 *)(dst + o), s32);
+
+        u64 s64 = *(u64 *)(src + o);
+        bzero(dst, 32);
+        *(u64 *)(dst + o) = s64;
+        chk64("store64", o, *(u64 *)(dst + o), s64);
+    }
+
+    //////////////////////////////////////////////////////////////
+    printf("Done\n");
+    if (err_cnt) {
+        printf("FAILURE. %d errors\n", err_cnt);
+        TEST_FAILED;
+        return 1;
+    } else {
+        printf("SUCCESS\n");
+        TEST_PASSED;
+        return 0;
+    }
 }

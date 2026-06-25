@@ -5,10 +5,15 @@
 
 #include "interrupt_test.h"
 
-// There is no way to commnicate UVM side information to firmware currently
-// so use a fixed value for moving mtvec
-// This should be safely away from the code area and yet safely "down" the stack area
-#define BOOTSTRAP_MTVEC 0x00000200
+#define TEST_PASSED  *(volatile int *)0x20000000 = 123456789
+#define TEST_FAILED  *(volatile int *)0x20000000 = 1
+
+// mtvec is bootstrapped from the core boot address at reset (CV32E20 initialises
+// the trap-vector base to the boot address). The core Verilator TB boots at
+// 0x4000 (tb_top.sv BOOT_ADDR / link.ld __boot_address), so mtvec reads back as
+// 0x4000 | mode(0b01). This test's own _start (interrupt_bootstrap.S) does not
+// reprogram mtvec, so the bootstrapped value is observable.
+#define BOOTSTRAP_MTVEC 0x00004000
 
 volatile uint32_t irq_id                  = 0;
 volatile uint32_t irq_id_q[IRQ_NUM];
@@ -118,9 +123,16 @@ void generic_irq_handler(uint32_t id) {
     asm volatile("csrr %0, mcause": "=r" (mmcause));
     irq_id = id;
 
+    // CV32E20 interrupts are level-sensitive with no ack handshake: the mm_ram
+    // timer IRQ stays asserted until software deasserts it. Clear it here (by
+    // re-arming with mask 0) so the serviced interrupt does not immediately
+    // re-fire after MRET.
+    if (active_test == 1) {
+        mm_ram_assert_irq(0, 0);
+    }
     if (active_test == 2 || active_test == 3 || active_test == 4) {
         irq_id_q[irq_id_q_ptr++] = id;
-    } 
+    }
     if (active_test == 3) {
         if (nested_irq_valid) {
             nested_irq_valid = 0;
@@ -130,25 +142,28 @@ void generic_irq_handler(uint32_t id) {
     }
 }
 
-void m_software_irq_handler(void) { generic_irq_handler(SOFTWARE_IRQ_ID); }
-void m_timer_irq_handler(void) { generic_irq_handler(TIMER_IRQ_ID); }
-void m_external_irq_handler(void) { generic_irq_handler(EXTERNAL_IRQ_ID); }
-void m_fast0_irq_handler(void) { generic_irq_handler(FAST0_IRQ_ID); }
-void m_fast1_irq_handler(void) { generic_irq_handler(FAST1_IRQ_ID); }
-void m_fast2_irq_handler(void) { generic_irq_handler(FAST2_IRQ_ID); }
-void m_fast3_irq_handler(void) { generic_irq_handler(FAST3_IRQ_ID); }
-void m_fast4_irq_handler(void) { generic_irq_handler(FAST4_IRQ_ID); }
-void m_fast5_irq_handler(void) { generic_irq_handler(FAST5_IRQ_ID); }
-void m_fast6_irq_handler(void) { generic_irq_handler(FAST6_IRQ_ID); }
-void m_fast7_irq_handler(void) { generic_irq_handler(FAST7_IRQ_ID); }
-void m_fast8_irq_handler(void) { generic_irq_handler(FAST8_IRQ_ID); }
-void m_fast9_irq_handler(void) { generic_irq_handler(FAST9_IRQ_ID); }
-void m_fast10_irq_handler(void) { generic_irq_handler(FAST10_IRQ_ID); }
-void m_fast11_irq_handler(void) { generic_irq_handler(FAST11_IRQ_ID); }
-void m_fast12_irq_handler(void) { generic_irq_handler(FAST12_IRQ_ID); }
-void m_fast13_irq_handler(void) { generic_irq_handler(FAST13_IRQ_ID); }
-void m_fast14_irq_handler(void) { generic_irq_handler(FAST14_IRQ_ID); }
-void m_fast15_irq_handler(void) { generic_irq_handler(FAST15_IRQ_ID); }
+/* Interrupt handlers must use MRET and save all caller-saved state: declare
+ * them as RISC-V machine interrupt routines. */
+#define IRQ_HANDLER __attribute__((interrupt ("machine"))) void
+IRQ_HANDLER m_software_irq_handler(void) { generic_irq_handler(SOFTWARE_IRQ_ID); }
+IRQ_HANDLER m_timer_irq_handler(void) { generic_irq_handler(TIMER_IRQ_ID); }
+IRQ_HANDLER m_external_irq_handler(void) { generic_irq_handler(EXTERNAL_IRQ_ID); }
+IRQ_HANDLER m_fast0_irq_handler(void) { generic_irq_handler(FAST0_IRQ_ID); }
+IRQ_HANDLER m_fast1_irq_handler(void) { generic_irq_handler(FAST1_IRQ_ID); }
+IRQ_HANDLER m_fast2_irq_handler(void) { generic_irq_handler(FAST2_IRQ_ID); }
+IRQ_HANDLER m_fast3_irq_handler(void) { generic_irq_handler(FAST3_IRQ_ID); }
+IRQ_HANDLER m_fast4_irq_handler(void) { generic_irq_handler(FAST4_IRQ_ID); }
+IRQ_HANDLER m_fast5_irq_handler(void) { generic_irq_handler(FAST5_IRQ_ID); }
+IRQ_HANDLER m_fast6_irq_handler(void) { generic_irq_handler(FAST6_IRQ_ID); }
+IRQ_HANDLER m_fast7_irq_handler(void) { generic_irq_handler(FAST7_IRQ_ID); }
+IRQ_HANDLER m_fast8_irq_handler(void) { generic_irq_handler(FAST8_IRQ_ID); }
+IRQ_HANDLER m_fast9_irq_handler(void) { generic_irq_handler(FAST9_IRQ_ID); }
+IRQ_HANDLER m_fast10_irq_handler(void) { generic_irq_handler(FAST10_IRQ_ID); }
+IRQ_HANDLER m_fast11_irq_handler(void) { generic_irq_handler(FAST11_IRQ_ID); }
+IRQ_HANDLER m_fast12_irq_handler(void) { generic_irq_handler(FAST12_IRQ_ID); }
+IRQ_HANDLER m_fast13_irq_handler(void) { generic_irq_handler(FAST13_IRQ_ID); }
+IRQ_HANDLER m_fast14_irq_handler(void) { generic_irq_handler(FAST14_IRQ_ID); }
+IRQ_HANDLER m_fast15_irq_handler(void) { generic_irq_handler(FAST15_IRQ_ID); }
 
 // A Special version of the SW Handler (vector 0) used in the direct mode
 __attribute__((interrupt ("machine"))) void u_sw_direct_irq_handler(void)  {
@@ -179,13 +194,30 @@ int main(int argc, char *argv[]) {
 
     // Test that mtvec is correct
     retval = test_mtvec();
-    if (retval != EXIT_SUCCESS)
+    if (retval != EXIT_SUCCESS) {
+        TEST_FAILED;
         return retval;
+    }
+
+    // The bootstrapped mtvec (boot address 0x4000) has been verified above.
+    // interrupt_bootstrap.S's _start does not program mtvec, so it still points
+    // at the boot address (where _start lives), not the linked vector table.
+    // Point it at the real vector table so the interrupt handlers are reachable.
+    asm volatile("la   t0, vector_table\n\t"
+                 "ori  t0, t0, 1\n\t"        /* vectored mode */
+                 "csrw mtvec, t0\n\t"
+                 ::: "t0");
 
     // Test 1
     retval = test1();
-    if (retval != EXIT_SUCCESS)
-        return retval;    
+    if (retval != EXIT_SUCCESS) {
+        TEST_FAILED;
+        return retval;
+    }
+
+    printf("interrupt_bootstrap: all tests passed\n");
+    TEST_PASSED;
+    return EXIT_SUCCESS;
 }
 
 // Test 1 will issue individual interrupts one at a time and ensure that each ISR is entered

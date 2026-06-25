@@ -35,6 +35,9 @@
 
 #include "all_csr_por.h"
 
+#define TEST_PASSED  *(volatile int *)0x20000000 = 123456789
+#define TEST_FAILED  *(volatile int *)0x20000000 = 1
+
 int main(int argc, char *argv[]) {
     printf("\n\nBegin Test\n");
 	//
@@ -45,6 +48,12 @@ int main(int argc, char *argv[]) {
     read_csr();
 
     printf("End Test\n\n");
+
+    // No standalone value checks here (this is the Imperas step-compare
+    // "proof of life" harness). Reaching this point means every CSR address
+    // 0x000-0xFFF was read and all illegal accesses were trapped and skipped
+    // by the BSP handler without hanging the core, so signal pass.
+    TEST_PASSED;
 
     return EXIT_SUCCESS;
 }

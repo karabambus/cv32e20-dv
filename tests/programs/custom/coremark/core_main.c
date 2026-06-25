@@ -455,5 +455,13 @@ for (i = 0; i < MULTITHREAD; i++)
     /* And last call any target specific code for finalizing */
     portable_fini(&(results[0].port));
 
+    /* CV32E20 DV: signal pass/fail to the testbench status peripheral.
+     * total_errors == 0 means all CRCs validated against the known-good
+     * values for the configured seed (correct operation). */
+    if (total_errors == 0)
+        *(volatile int *)0x20000000 = 123456789; /* TEST_PASSED */
+    else
+        *(volatile int *)0x20000000 = 1;          /* TEST_FAILED */
+
     return MAIN_RETURN_VAL;
 }

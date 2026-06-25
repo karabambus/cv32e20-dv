@@ -67,6 +67,27 @@ typedef struct CORE_PORTABLE_S
 #endif
 #endif
 
+/* CV32E20 DV: the upstream CoreMark build passes these as -D flags from its
+ * own Makefile.  This test relies on the default toolchain CFLAGS, so provide
+ * sensible defaults here.  ITERATIONS only affects runtime: the validation
+ * CRCs are deterministic per seed and iteration-count independent, so a small
+ * count keeps simulation short while still validating correct operation. */
+#ifndef PERFORMANCE_RUN
+#ifndef VALIDATION_RUN
+#ifndef PROFILE_RUN
+#define PERFORMANCE_RUN 1
+#endif
+#endif
+#endif
+
+#ifndef ITERATIONS
+#define ITERATIONS 1
+#endif
+
+#ifndef FLAGS_STR
+#define FLAGS_STR "default CV32E20-DV toolchain CFLAGS"
+#endif
+
 #ifndef COMPILER_FLAGS
 #define COMPILER_FLAGS FLAGS_STR
 #endif

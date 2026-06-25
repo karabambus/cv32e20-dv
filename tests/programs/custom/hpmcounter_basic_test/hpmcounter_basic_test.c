@@ -18,398 +18,151 @@
 **
 *******************************************************************************
 **
-** Performance counter directed test
+** Performance counter directed test (CV32E20).
 **
-** Very basic sanity check for:
+** IMPORTANT: CV32E20 (CVE2) hardwires each event counter to a fixed event
+** (see CV32E20 Performance Counters reference and cve2_cs_registers.sv):
 **
-**  - Count load use hazards
-**  - Count jump register hazards
-**  - Count memory read transactions
-**  - Count memory write transactions
-**  - Count jumps
-**  - Count branches (conditional)
-**  - Count branches taken (conditional)
-**  - Compressed instructions
-**  - Retired instructions
+**    mhpmcounter3 (0xB03) -> event 3  NumCyclesLSU
+**    mhpmcounter4 (0xB04) -> event 4  NumCyclesIF
+**    mhpmcounter5 (0xB05) -> event 5  NumLoads
+**    mhpmcounter6 (0xB06) -> event 6  NumStores
+**    mhpmcounter7 (0xB07) -> event 7  NumJumps
+**    mhpmcounter8 (0xB08) -> event 8  NumBranches
+**    mhpmcounter9 (0xB09) -> event 9  NumBranchesTaken
+**    mhpmcounter10(0xB0A) -> event 10 NumInstrRetC (compressed)
 **
-** Make sure to instantiate cv32e20_wrapper with the parameter
-** NUM_MHPMCOUNTERS = 1 (or higher)
+** The mhpmevent CSRs are NOT programmable event selectors on CV32E20, so this
+** test reads the appropriate hardwired counter directly rather than trying to
+** route an event onto mhpmcounter3 (which is what the cv32e40p-style original
+** did).  Counting is gated with mcountinhibit (0x320): all counters are
+** inhibited outside the measured window and enabled only across the asm block
+** of interest, so each event counter reflects exactly the events in that block.
 **
 *******************************************************************************
 */
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
-static int chck(unsigned int is, unsigned int should)
-{
-  int err;
-  err = is == should ? 0 : 1;
-  if (err)
-    printf("fail\n");
-  else
-    printf("pass\n");
-  return err;
-}
+#define TEST_PASSED  *(volatile int *)0x20000000 = 123456789
+#define TEST_FAILED  *(volatile int *)0x20000000 = 1
 
-static int chck_le(unsigned int is, unsigned int should)
+static int chck(const char *name, unsigned int is, unsigned int should)
 {
-  int err;
-  err = is <= should ? 0 : 1;
-  if (err)
-    printf("fail\n");
-  else
-    printf("pass\n");
+  int err = (is == should) ? 0 : 1;
+  printf("%-24s = %u (expected %u) %s\n", name, is, should, err ? "FAIL" : "pass");
   return err;
 }
 
 int main(int argc, char *argv[])
 {
   int err_cnt = 0;
+  unsigned int count;
 
-  volatile unsigned int event;
-  volatile unsigned int count;
-  volatile unsigned int minstret;
-  volatile unsigned int count_while_on;
-
-  __asm__ volatile(".option rvc");
+  printf("\nCV32E20 hardwired performance-counter test\n\n");
 
   //////////////////////////////////////////////////////////////
-  // Retired instruction count (0) - Immediate minstret read
-  printf("\nRetired instruction count (0)");
-
-  event = 0x2;                                                  // Trigger on retired instructions
-  __asm__ volatile("csrw 0x323, %0 " :: "r"(event));            // Set mphmevent3
-  __asm__ volatile("csrwi 0xB02, 0x0");                         // minstret = 0
-  __asm__ volatile("csrwi 0xB03, 0x0");                         // mhpmcounter3 = 0
-  __asm__ volatile("csrwi 0x320, 0x0");                         // Enable counters
-  __asm__ volatile("csrr t0, minstret\n\t\
-                    addi t1, x0, 0\n\t\
-                    addi t2, x0, 0" \
-                    : : : "t0", "t1", "t2");
-  __asm__ volatile("csrwi 0x320, 0x1F");                        // Inhibit mcycle, minstret, mhpmcounter3-4
-  __asm__ volatile("csrr %0, 0xB02" : "=r"(minstret));          // minstret
-  __asm__ volatile("csrr %0, 0xB03" : "=r"(count));             // mhpmcounter3
-  __asm__ volatile("addi %0, t0, 0" : "=r"(count_while_on));    // count_while_on
-
-  printf("\nminstret count while running = %d\n", count_while_on);
-  err_cnt += chck(count_while_on, 0);
-
-  printf("\nminstret count = %d\n", minstret);
-  err_cnt += chck(minstret, 4);
+  // Loads -> mhpmcounter5 (event 5, NumLoads). Three word loads.
+  __asm__ volatile(
+    "li    t0, -1          \n"
+    "csrw  0x320, t0       \n"   // inhibit all counters
+    "csrwi 0xB05, 0        \n"   // mhpmcounter5 = 0
+    "csrw  0x320, x0       \n"   // enable all counters
+    "lw    x0, 0(sp)       \n"
+    "lw    x0, 0(sp)       \n"
+    "lw    x0, 0(sp)       \n"
+    "li    t0, -1          \n"
+    "csrw  0x320, t0       \n"   // inhibit all counters
+    "csrr  %0, 0xB05       \n"
+    : "=r"(count) : : "t0");
+  err_cnt += chck("Loads (mhpmcounter5)", count, 3);
 
   //////////////////////////////////////////////////////////////
-  // Retired instruction count (1) - minstret read-after-write
-  printf("\nRetired instruction count (1)");
-
-  event = 0x2;                                                  // Trigger on retired instructions
-  __asm__ volatile("csrw 0x323, %0 " :: "r"(event));            // Set mphmevent3
-  __asm__ volatile("csrwi 0xB02, 0x0");                         // minstret = 0
-  __asm__ volatile("csrwi 0xB03, 0x0");                         // mhpmcounter3 = 0
-  __asm__ volatile("csrwi 0x320, 0x0");                         // Enable counters
-  __asm__ volatile("csrwi minstret, 0xA\n\t\
-                    csrr t0, minstret\n\t\
-                    addi t1, x0, 0\n\t\
-                    addi t2, x0, 0\n\t\
-                    nop" \
-                    : : : "t0", "t1", "t2");
-  __asm__ volatile("csrwi 0x320, 0x1F");                        // Inhibit mcycle, minstret, mhpmcounter3-4
-  __asm__ volatile("csrr %0, 0xB02" : "=r"(minstret));          // minstret
-  __asm__ volatile("csrr %0, 0xB03" : "=r"(count));             // mhpmcounter3
-  __asm__ volatile("addi %0, t0, 0" : "=r"(count_while_on));    // 
-
-  printf("\nminstret count while running = %d\n", count_while_on);
-  err_cnt += chck(count_while_on, 0xA);
-
-  printf("\nminstret count = %d\n", minstret);
-  err_cnt += chck(minstret, 0xF);
+  // Stores -> mhpmcounter6 (event 6, NumStores). Three word stores.
+  __asm__ volatile(
+    "li    t0, -1          \n"
+    "csrw  0x320, t0       \n"
+    "csrwi 0xB06, 0        \n"
+    "csrw  0x320, x0       \n"
+    "sw    x0, 0(sp)       \n"
+    "sw    x0, 0(sp)       \n"
+    "sw    x0, 0(sp)       \n"
+    "li    t0, -1          \n"
+    "csrw  0x320, t0       \n"
+    "csrr  %0, 0xB06       \n"
+    : "=r"(count) : : "t0");
+  err_cnt += chck("Stores (mhpmcounter6)", count, 3);
 
   //////////////////////////////////////////////////////////////
-  // Retired instruction count (2)
-  printf("\nRetired instruction count (2)");
-
-  event = 0x2;                                                  // Trigger on retired instructions
-  __asm__ volatile("csrw 0x323, %0 " :: "r"(event));            // Set mphmevent3
-  __asm__ volatile("csrwi 0xB02, 0x0");                         // minstret = 0
-  __asm__ volatile("csrwi 0xB03, 0x0");                         // mhpmcounter3 = 0
-  __asm__ volatile("csrwi 0x320, 0x0");                         // Enable counters
-  __asm__ volatile("sw x0, 0(sp)\n\t\
-                    addi t0, x0, 5\n\t\
-                    addi t1, x0, 0\n\t\
-                    addi t2, x0, 0\n\t\
-                    lw t2, 0(sp)\n\t\
-                    branch_target: addi t2, t2, 1\n\t\
-                    addi t1, t1, 1\n\t\
-                    lw t2, 0(sp)\n\t\
-                    sw t1, 0(sp)\n\t\
-                    sw t1, 0(sp)\n\t\
-                    bne t0, t1, branch_target\n\t\
-                    j jump_target\n\t\
-                    lw t2, 0(sp)\n\t\
-                    lw t2, 0(sp)\n\t\
-                    jump_target: nop\n\t\
-                    nop\n\t\
-                    nop" \
-                    : : : "t0", "t1", "t2");
-  __asm__ volatile("csrwi 0x320, 0x1F");                        // Inhibit mcycle, minstret, mhpmcounter3-4
-  __asm__ volatile("csrr %0, 0xB02" : "=r"(minstret));          // minstret
-  __asm__ volatile("csrr %0, 0xB03" : "=r"(count));             // mhpmcounter3
-
-  printf("\nminstret count = %d\n", minstret);
-  err_cnt += chck(minstret, 5 + 6*5 + 4 + 1);
+  // Jumps -> mhpmcounter7 (event 7, NumJumps). Two unconditional jumps.
+  __asm__ volatile(
+    "li    t0, -1          \n"
+    "csrw  0x320, t0       \n"
+    "csrwi 0xB07, 0        \n"
+    "csrw  0x320, x0       \n"
+    "j     1f              \n"
+    "1:                    \n"
+    "j     2f              \n"
+    "2:                    \n"
+    "li    t0, -1          \n"
+    "csrw  0x320, t0       \n"
+    "csrr  %0, 0xB07       \n"
+    : "=r"(count) : : "t0");
+  err_cnt += chck("Jumps (mhpmcounter7)", count, 2);
 
   //////////////////////////////////////////////////////////////
-  // Count load use hazards
-  printf("\nCount load use hazards");
-
-  event = 0x4;                                                  // Trigger on load use hazards
-  __asm__ volatile("csrw 0x323, %0 " :: "r"(event));            // Set mphmevent3
-  __asm__ volatile("csrwi 0xB02, 0x0");                         // minstret = 0
-  __asm__ volatile("csrwi 0xB03, 0x0");                         // mhpmcounter3 = 0
-  __asm__ volatile("csrwi 0x320, 0x0");                         // Enable counters
-  __asm__ volatile("lw x4, 0(sp)\n\t\
-                    addi x5, x4, 1\n\t\
-                    lw x6, 0(sp)\n\t\
-                    addi x7, x0, 1" \
-                    : : : "x4", "x5", "x6", "x7");
-  __asm__ volatile("csrwi 0x320, 0x1F");                        // Inhibit mcycle, minstret, mhpmcounter3-4
-  __asm__ volatile("csrr %0, 0xB02" : "=r"(minstret));          // minstret
-  __asm__ volatile("csrr %0, 0xB03" : "=r"(count));             // mhpmcounter3
-
-  printf("\nminstret count = %d\n", minstret);
-  err_cnt += chck(minstret, 5);
-
-  printf("Load use hazards count = %d\n", count);
-  err_cnt += chck_le(count, 1);                                 // Hazard count is 0 or 1 (0 if due to instruction interface stalls 'use' did not closely follow the load)
-
-  //////////////////////////////////////////////////////////////
-  // Count jump register hazards
-  printf("\nCount Jump register hazards");
-
-  event = 0x8;                                                  // Trigger on jump register hazards
-  __asm__ volatile("csrw 0x323, %0 " :: "r"(event));            // Set mphmevent3
-  __asm__ volatile("csrwi 0xB02, 0x0");                         // minstret = 0
-  __asm__ volatile("csrwi 0xB03, 0x0");                         // mhpmcounter3 = 0
-  __asm__ volatile("csrwi 0x320, 0x0");                         // Enable counters
-  __asm__ volatile("auipc x4, 0x0\n\t\
-                    addi x4, x4, 10\n\t\
-                    jalr x0, x4, 0x0" \
-                    : : : "x4");
-  __asm__ volatile("csrwi 0x320, 0x1F");                        // Inhibit mcycle, minstret, mhpmcounter3-4
-  __asm__ volatile("csrr %0, 0xB02" : "=r"(minstret));          // minstret
-  __asm__ volatile("csrr %0, 0xB03" : "=r"(count));             // mhpmcounter3
-
-  printf("\nminstret count = %d\n", minstret);
-  err_cnt += chck(minstret, 4);
-
-  printf("Jump register hazards count = %d\n", count);
-  err_cnt += chck_le(count, 1);                                 // Hazard count is 0 or 1 (0 if due to instruction interface stalls jalr did not closely follow the addi before it)
+  // Branches -> mhpmcounter8 (event 8, NumBranches, conditional, taken or not)
+  // Taken branches -> mhpmcounter9 (event 9, NumBranchesTaken)
+  // 3 conditional branches: beq(taken), bne(not taken), beq(taken).
+  unsigned int taken;
+  __asm__ volatile(
+    "li    t0, -1          \n"
+    "csrw  0x320, t0       \n"
+    "csrwi 0xB08, 0        \n"
+    "csrwi 0xB09, 0        \n"
+    "csrw  0x320, x0       \n"
+    "beq   x0, x0, 1f      \n"   // taken
+    "1:                    \n"
+    "bne   x0, x0, 2f      \n"   // not taken
+    "2:                    \n"
+    "beq   x0, x0, 3f      \n"   // taken
+    "3:                    \n"
+    "li    t0, -1          \n"
+    "csrw  0x320, t0       \n"
+    "csrr  %0, 0xB08       \n"
+    "csrr  %1, 0xB09       \n"
+    : "=r"(count), "=r"(taken) : : "t0");
+  err_cnt += chck("Branches (mhpmcounter8)", count, 3);
+  err_cnt += chck("Taken branches (cnt9)", taken, 2);
 
   //////////////////////////////////////////////////////////////
-  // Count memory read transactions - Read while enabled
-  printf("\nCount memory read transactions (0)");
-
-  event = 0x20;                                                 // Trigger on loads
-  __asm__ volatile("csrw 0x323, %0 " :: "r"(event));            // Set mphmevent3
-  __asm__ volatile("csrwi 0xB02, 0x0");                         // minstret = 0
-  __asm__ volatile("csrwi 0xB03, 0x0");                         // mhpmcounter3 = 0
-  __asm__ volatile("csrwi 0x320, 0x0");                         // Enable counters
-  __asm__ volatile("lw x0, 0(sp)\n\t\
-                    csrr t0, mhpmcounter3\n\t\
-                    addi t1, x0, 0\n\t\
-                    addi t2, x0, 0" \
-                    : : : "t0", "t1", "t2");
-  __asm__ volatile("csrwi 0x320, 0x1F");                        // Inhibit mcycle, minstret, mhpmcounter3-4
-  __asm__ volatile("csrr %0, 0xB02" : "=r"(minstret));          // minstret
-  __asm__ volatile("csrr %0, 0xB03" : "=r"(count));             // mhpmcounter3
-  __asm__ volatile("addi %0, t0, 0" : "=r"(count_while_on));    // count_while_on
-
-  printf("\nminstret count = %d\n", minstret);
-  err_cnt += chck(minstret, 5);
-
-  printf("Load count while running = %d\n", count_while_on);
-  err_cnt += chck(count_while_on, 1);
-
-  printf("Load count = %d\n", count);
-  err_cnt += chck(count, 1);
+  // Compressed instructions -> mhpmcounter10 (event 10, NumInstrRetC).
+  // Three explicit compressed instructions.
+  // NB: prepare the inhibit mask in t0 BEFORE enabling. "li t0,-1" assembles
+  // to a compressed c.li (-1 fits in 6 bits); if it appeared inside the counting
+  // window it would be counted as a 4th compressed instruction.
+  __asm__ volatile(
+    "li    t0, -1          \n"   // inhibit mask (outside the window)
+    "csrw  0x320, t0       \n"   // inhibit all counters
+    "csrwi 0xB0A, 0        \n"   // mhpmcounter10 = 0
+    "csrw  0x320, x0       \n"   // enable all counters
+    "c.addi x15, 1         \n"
+    "c.addi x15, 1         \n"
+    "c.addi x15, 1         \n"
+    "csrw  0x320, t0       \n"   // inhibit all (csrw is 32-bit, not counted)
+    "csrr  %0, 0xB0A       \n"
+    : "=r"(count) : : "t0", "x15");
+  err_cnt += chck("Compressed (mhpmcounter10)", count, 3);
 
   //////////////////////////////////////////////////////////////
-  // Count memory read transactions - Write after load event
-  printf("\nCount memory read transactions (1)");
-
-  event = 0x20;                                                 // Trigger on loads
-  __asm__ volatile("csrw 0x323, %0 " :: "r"(event));            // Set mphmevent3
-  __asm__ volatile("csrwi 0xB02, 0x0");                         // minstret = 0
-  __asm__ volatile("csrwi 0xB03, 0x0");                         // mhpmcounter3 = 0
-  __asm__ volatile("csrwi 0x320, 0x0");                         // Enable counters
-  __asm__ volatile("lw x0, 0(sp)\n\t\
-                    csrwi mhpmcounter3, 0xA\n\t\
-                    addi t1, x0, 0\n\t\
-                    addi t2, x0, 0" \
-                    : : : "t0", "t1", "t2");
-  __asm__ volatile("csrwi 0x320, 0x1F");                        // Inhibit mcycle, minstret, mhpmcounter3-4
-  __asm__ volatile("csrr %0, 0xB02" : "=r"(minstret));          // minstret
-  __asm__ volatile("csrr %0, 0xB03" : "=r"(count));             // mhpmcounter3
-  __asm__ volatile("addi %0, t0, 0" : "=r"(count_while_on));    // count_while_on
-
-  printf("\nminstret count = %d\n", minstret);
-  err_cnt += chck(minstret, 5);
-
-  printf("Load count = %d\n", count);
-  err_cnt += chck(count, 0xA);
-
-  //////////////////////////////////////////////////////////////
-  // Count memory read transactions
-  printf("\nCount memory read transactions (2)");
-
-  event = 0x20;                                                 // Trigger on loads
-  __asm__ volatile("csrw 0x323, %0 " :: "r"(event));            // Set mphmevent3
-  __asm__ volatile("csrwi 0xB02, 0x0");                         // minstret = 0
-  __asm__ volatile("csrwi 0xB03, 0x0");                         // mhpmcounter3 = 0
-  __asm__ volatile("csrwi 0x320, 0x0");                         // Enable counters
-  __asm__ volatile("lw x0, 0(sp)");                             // count++
-  __asm__ volatile("mulh x0, x0, x0");
-  __asm__ volatile("j jump_target_memread");                    // do not count jump in mphmevent3
-  __asm__ volatile("nop");                                      // do not count nop in instret
-  __asm__ volatile("jump_target_memread:");
-  __asm__ volatile("lw x0, 0(sp)");                             // count++
-  __asm__ volatile("csrwi 0x320, 0x1F");                        // Inhibit mcycle, minstret, mhpmcounter3-4
-  __asm__ volatile("csrr %0, 0xB02" : "=r"(minstret));          // minstret
-  __asm__ volatile("csrr %0, 0xB03" : "=r"(count));             // mhpmcounter3
-
-  printf("\nminstret count = %d\n", minstret);
-  err_cnt += chck(minstret, 5);
-
-  printf("Load count = %d\n", count);
-  err_cnt += chck(count, 2);
-
-  //////////////////////////////////////////////////////////////
-  // Count memory write transactions
-  printf("\nCount memory write transactions");
-
-  event = 0x40;                                                 // Trigger on stores
-  __asm__ volatile("csrw 0x323, %0 " :: "r"(event));            // Set mphmevent3
-  __asm__ volatile("csrwi 0xB02, 0x0");                         // minstret = 0
-  __asm__ volatile("csrwi 0xB03, 0x0");                         // mhpmcounter3 = 0
-  __asm__ volatile("csrwi 0x320, 0x0");                         // Enable counters
-  __asm__ volatile("sw x0, 0(sp)");                             // count++
-  __asm__ volatile("mulh x0, x0, x0");
-  __asm__ volatile("sw x0, 0(sp)");                             // count++
-  __asm__ volatile("csrwi 0x320, 0x1F");                        // Inhibit mcycle, minstret, mhpmcounter3-4
-  __asm__ volatile("csrr %0, 0xB02" : "=r"(minstret));          // minstret
-  __asm__ volatile("csrr %0, 0xB03" : "=r"(count));             // mhpmcounter3
-
-  printf("\nminstret count = %d\n", minstret);
-  err_cnt += chck(minstret, 4);
-
-  printf("Store count = %d\n", count);
-  err_cnt += chck(count, 2);
-
-  //////////////////////////////////////////////////////////////
-  // Count jumps
-  printf("\nCount jumps");
-
-  event = 0x80;                                                 // Trigger on jumps
-  __asm__ volatile("csrw 0x323, %0 " :: "r"(event));            // Set mphmevent3
-  __asm__ volatile("csrwi 0xB02, 0x0");                         // minstret = 0
-  __asm__ volatile("csrwi 0xB03, 0x0");                         // mhpmcounter3 = 0
-  __asm__ volatile("csrwi 0x320, 0x0");                         // Enable counters
-  __asm__ volatile("j jump_target_0");                          // count++
-  __asm__ volatile("jump_target_0:");
-  __asm__ volatile("j jump_target_1");                          // count++
-  __asm__ volatile("jump_target_1:");
-  __asm__ volatile("csrwi 0x320, 0x1F");                        // Inhibit mcycle, minstret, mhpmcounter3-4
-  __asm__ volatile("csrr %0, 0xB02" : "=r"(minstret));          // minstret
-  __asm__ volatile("csrr %0, 0xB03" : "=r"(count));             // mhpmcounter3
-
-  printf("\nminstret count = %d\n", minstret);
-  err_cnt += chck(minstret, 3);
-
-  printf("Jump count = %d\n", count);
-  err_cnt += chck(count, 2);
-
-  //////////////////////////////////////////////////////////////
-  // Count branches (conditional)
-  printf("\nCount branches (conditional)");
-
-  event = 0x100;                                                // Trigger on on taken branches
-  __asm__ volatile("csrw 0x323, %0 " :: "r"(event));            // Set mphmevent3
-  __asm__ volatile("csrwi 0xB02, 0x0");                         // minstret = 0
-  __asm__ volatile("csrwi 0xB03, 0x0");                         // mhpmcounter3 = 0
-  __asm__ volatile("csrwi 0x320, 0x0");                         // Enable counters
-  __asm__ volatile("beq x0, x0, branch_target_0");              // count++
-  __asm__ volatile("branch_target_0:");
-  __asm__ volatile("bne x0, x0, branch_target_1");              // count++
-  __asm__ volatile("branch_target_1:");
-  __asm__ volatile("beq x0, x0, branch_target_2");              // count++
-  __asm__ volatile("branch_target_2:");
-  __asm__ volatile("csrwi 0x320, 0x1F");                        // Inhibit mcycle, minstret, mhpmcounter3-4
-  __asm__ volatile("csrr %0, 0xB02" : "=r"(minstret));          // minstret
-  __asm__ volatile("csrr %0, 0xB03" : "=r"(count));             // mhpmcounter3
-
-  printf("\nminstret count = %d\n", minstret);
-  err_cnt += chck(minstret, 4);
-
-  printf("Branch count = %d\n", count);
-  err_cnt += chck(count, 3);
-
-  //////////////////////////////////////////////////////////////
-  // Count branches taken (conditional)
-  printf("\nCount branches taken (conditional)");
-
-  event = 0x200;                                                // Trigger on on taken branches
-  __asm__ volatile("csrw 0x323, %0 " :: "r"(event));            // Set mphmevent3
-  __asm__ volatile("csrwi 0xB02, 0x0");                         // minstret = 0
-  __asm__ volatile("csrwi 0xB03, 0x0");                         // mhpmcounter3 = 0
-  __asm__ volatile("csrwi 0x320, 0x0");                         // Enable counters
-  __asm__ volatile("beq x0, x0, branch_target_3");              // count++
-  __asm__ volatile("branch_target_3:");
-  __asm__ volatile("bne x0, x0, branch_target_4");              // (not taken)
-  __asm__ volatile("branch_target_4:");
-  __asm__ volatile("beq x0, x0, branch_target_5");              // count++
-  __asm__ volatile("branch_target_5:");
-  __asm__ volatile("csrwi 0x320, 0x1F");                        // Inhibit mcycle, minstret, mhpmcounter3-4
-  __asm__ volatile("csrr %0, 0xB02" : "=r"(minstret));          // minstret
-  __asm__ volatile("csrr %0, 0xB03" : "=r"(count));             // mhpmcounter3
-
-  printf("\nminstret count = %d\n", minstret);
-  err_cnt += chck(minstret, 4);
-
-  printf("Branch taken count = %d\n", count);
-  err_cnt += chck(count, 2);
-
-  //////////////////////////////////////////////////////////////
-  // Compressed instructions
-  printf("\nCompressed instructions");
-
-  event = 0x400;                                                // Trigger on compressed instructions
-  __asm__ volatile("csrw 0x323, %0 " :: "r"(event));            // Set mphmevent3
-  __asm__ volatile("csrwi 0xB02, 0x0");                         // minstret = 0
-  __asm__ volatile("csrwi 0xB03, 0x0");                         // mhpmcounter3 = 0
-  __asm__ volatile("csrwi 0x320, 0x0");                         // Enable counters
-  __asm__ volatile("c.addi x15, 1\n\t\
-                    c.nop\n\t\
-                    c.addi x15, 1" \
-                    : : : "x15");
-  __asm__ volatile("csrwi 0x320, 0x1F");                        // Inhibit mcycle, minstret, mhpmcounter3-4
-  __asm__ volatile("csrr %0, 0xB02" : "=r"(minstret));          // minstret
-  __asm__ volatile("csrr %0, 0xB03" : "=r"(count));             // mhpmcounter3
-
-  printf("\nminstret count = %d\n", minstret);
-  err_cnt += chck(minstret, 4);
-
-  printf("Compressed count = %d\n", count);
-  err_cnt += chck(count, 3);
-
-  //////////////////////////////////////////////////////////////
-  // Check for errors
-  printf("\nDone");
-
-  if (err_cnt)
+  printf("\nDone\n");
+  if (err_cnt) {
     printf("FAILURE. %d errors\n\n", err_cnt);
-  else
+    TEST_FAILED;
+  } else {
     printf("SUCCESS\n\n");
-
+    TEST_PASSED;
+  }
   return err_cnt;
 }

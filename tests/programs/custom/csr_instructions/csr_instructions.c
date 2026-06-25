@@ -25,6 +25,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define TEST_PASSED  *(volatile int *)0x20000000 = 123456789
+#define TEST_FAILED  *(volatile int *)0x20000000 = 1
+
 int main(int argc, char *argv[])
 {
   unsigned int readd;  // Read data
@@ -105,12 +108,31 @@ int main(int argc, char *argv[])
 
 
 
+  // Self-check: mscratch (0x340) is a plain 32-bit R/W register. Verify a
+  // write-read round-trip with a few patterns to give the coverage test teeth.
+  {
+    static const unsigned int patterns[] = {
+      0x00000000u, 0xFFFFFFFFu, 0xA5A5A5A5u, 0x5A5A5A5Au, 0xDEADBEEFu
+    };
+    for (int i = 0; i < (int)(sizeof(patterns)/sizeof(patterns[0])); i++) {
+      writed = patterns[i];
+      __asm__ volatile("csrw 0x340, %0" : : "r"(writed));
+      __asm__ volatile("csrr %0, 0x340" : "=r"(readd));
+      if (readd != writed) {
+        printf("mscratch mismatch: wrote %08x read %08x\n", writed, readd);
+        err_cnt++;
+      }
+    }
+  }
+
   printf("DONE!\n\n");
 
   if (!err_cnt) {
+    TEST_PASSED;
     return EXIT_SUCCESS;
   } else {
-    printf("\n%0d failures\n", sum);
+    printf("\n%0d failures\n", err_cnt);
+    TEST_FAILED;
     return EXIT_FAILURE;
   }
 
