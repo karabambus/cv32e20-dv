@@ -5,21 +5,23 @@ SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
 
 # CV32E20 C test-program cleanup
 
-Tracking doc for the cleanup of the C test-programs under `tests/programs/custom`.
-Goal: each surviving test must (a) be applicable to the CV32E20 per the
+A "cleanup" of the C test-programs under `tests/programs/custom` was undertaken with the
+goal that each test must (a) be applicable to the CV32E20 per the
 **documentation** (authoritative over RTL), and (b) correctly assert the
-canonical pass/fail signature. Non-applicable tests are deleted.
+canonical pass/fail signature. Non-applicable tests were deleted.
 
 ## Canonical pass/fail protocol
 
 The TB virtual peripheral (`env/uvme/.../uvme_cv32e20_vp_status_flags_seq.sv`)
 flags **TEST PASSED only when `123456789` (0x075B_CD15) is written to the status
-symbol `tohost` / address `0x20000000`**. *Any other value written there is a
-FAILURE* (`uvm_error`). So:
+symbol `tohost` / address `0x20000000`**. In the UVM environment, *any other value
+written there is a FAILURE* (`uvm_error`). The "core" testbench will FAIL the test
+when 0x1 is written.  TODO: fix this so bothUVM and core have the same TEST FAIL signalling.
+So:
 
 ```c
 #define TEST_PASSED  *(volatile int *)0x20000000 = 123456789
-#define TEST_FAILED  *(volatile int *)0x20000000 = 1   /* any value != 123456789 */
+#define TEST_FAILED  *(volatile int *)0x20000000 = 1
 ```
 
 Tests that `#define TEST_PASSED ...= 1` are **broken** (they report FAIL on
@@ -51,7 +53,7 @@ new memory-mapped registers to the header, not to individual tests.
   `mhpmcounter3..` parametrizable (`MHPMCounterNum`, default 10 →
   mhpmcounter3..12). Fixed event map: 3=CyclesLSU 4=CyclesIF 5=Loads 6=Stores
   7=Jumps 8=Branches 9=BranchesTaken 10=InstrRetC 11=CyclesWFI 12=CyclesDivWait.
-  `mcountinhibit`(0x320) all-enabled at reset. `mhpmevent3..12` reset = (1<<id).
+  `mcountinhibit`(0x320) all-enabled at reset. `mhpmevent3..12` reset = (1<\<id).
   Unavailable counters read 0. **(confirm CV32E20 MHPMCounterNum for Cat 4.)**
 - **CSRs present (doc):** mstatus 300, misa 301, mie 304, mtvec 305,
   mcountinhibit 320, mhpmevent3-31 323-33F, mscratch 340, mepc 341, mcause 342,
@@ -108,7 +110,7 @@ Run: `make test TEST=<dir>` in `sim/core`. Delete = remove the directory.
 | riscv_csr | CSR | build-fail→**in progress** | **FIX (partial)** | DONE: defined test_fail (link); macro→123456789; dropped U-mode half (main); patched mstatus (18) + misa (18) expected values for M-only (script /tmp/patch_csr.py, model `mstatus=0x1800\|(v&0x88)`, misa U-bit cleared). REMAINING: template (env/corev-dv/cv32e20_csr_template.yaml) also classifies unimplemented unprivileged counter shadows 0xC00-0xC1F/0xC80-0xC9F as readable → core raises illegal (correct per docs). Needs template reconcile + regenerate (gen_csr_test.py needs `bitstring` pip pkg) OR more hand-patching. Backups: /tmp/riscv_csr_test_0.{S,h}.bak |
 | hpmcounter_basic_test | HPM | FAIL→**PASS** | **FIX (rewrote)** | rewrote to CV32E20 hardwired model: read mhpmcounter5-10 directly (loads/stores/jumps/branches/taken/compressed), gate with mcountinhibit window, dropped hazard sub-tests. All 6 event counts exact. (Subtlety: `li t0,-1` is compressed c.li — kept outside the counting window for the compressed check.) |
 | hpmcounter_hazard_test | HPM | FAIL | **REJECTED (deleted)** | tested ONLY load-use/jump-register hazards — events CV32E20 doesn't implement (cv32e40p LD_STALL/JR_STALL). Fully inapplicable. Directory removed. |
-| perf_counters_instructions | HPM | FAIL→**PASS** | **FIX (rewrote)** | replaced messy cv32e40p coverage test (had switch fall-through bugs, wrong reset expectations). New test validates: mhpmevent3-12=1<<n & writes ignored; mhpmevent/mhpmcounter13-31 read 0; mcountinhibit bit1 reserved + impl bits R/W; mcycle/minstret frozen-when-inhibited / advance-when-enabled. |
+| perf_counters_instructions | HPM | FAIL→**PASS** | **FIX (rewrote)** | replaced messy cv32e40p coverage test (had switch fall-through bugs, wrong reset expectations). New test validates: mhpmevent3-12=1<\<n & writes ignored; mhpmevent/mhpmcounter13-31 read 0; mcountinhibit bit1 reserved + impl bits R/W; mcycle/minstret frozen-when-inhibited / advance-when-enabled. |
 | debug_test_boot_set | debug | build-fail | **PARKED (UVM env)** | debug-at-reset via `+debug_boot_set` — no mechanism in core Verilator TB (debug_req is via mm_ram 0x15000008 during execution, not at reset). build broken (uint32_t). Covered by main debug_test. Left as-is for UVM env. |
 | debug_test_known_miscompares | debug | build-fail | **PARKED (UVM env)** | "known failures in step-and-compare" = ISS step-compare specific; core TB has no ISS. build broken (test_fail undefined). TEST_PASSED=1. Left as-is for UVM env. |
 | debug_test_reset | debug | build-fail | **PARKED (UVM env)** | debug-at-reset via `+reset_debug` — same as boot_set, no core-TB mechanism. build broken (uint32_t). Left as-is for UVM env. |
@@ -193,8 +195,3 @@ REMAINING (future, when extending beyond C): the `.S`/asm tests still use
 macros). To unify those too, either factor the addresses into an
 `#ifdef __ASSEMBLER__` section of a shared header or keep a parallel asm include
 — not done; this session was scoped to the C test-programs only.
-
-Untracked/working-tree only (cannot commit): `bsp/cv32e20_dv.h` is **new and
-untracked** — stage it before any `git clean`. `interrupt_test/rand.h` and this
-`CLEANUP.md` were committed earlier (1a93ab2) and given SPDX headers this
-session.

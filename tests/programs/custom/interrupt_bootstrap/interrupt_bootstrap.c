@@ -6,11 +6,11 @@
 #include "interrupt_test.h"
 
 // mtvec is bootstrapped from the core boot address at reset (CV32E20 initialises
-// the trap-vector base to the boot address). The core Verilator TB boots at
-// 0x4000 (tb_top.sv BOOT_ADDR / link.ld __boot_address), so mtvec reads back as
-// 0x4000 | mode(0b01). This test's own _start (interrupt_bootstrap.S) does not
-// reprogram mtvec, so the bootstrapped value is observable.
-#define BOOTSTRAP_MTVEC 0x00004000
+// the trap-vector base to the boot address). Use the linker-provided boot
+// address (bsp/link.ld provides __boot_address) so this stays in sync if the
+// boot address changes.
+extern char __boot_address;
+#define BOOTSTRAP_MTVEC ((uint32_t)&__boot_address)
 
 volatile uint32_t irq_id                  = 0;
 volatile uint32_t irq_id_q[IRQ_NUM];

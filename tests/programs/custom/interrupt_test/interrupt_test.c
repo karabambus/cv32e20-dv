@@ -116,7 +116,7 @@ void generic_irq_handler(uint32_t id) {
      // currently driven interrupts should be in the variable mm_ram_driven
     asm volatile("csrr %0, mcause": "=r" (mmcause));
     irq_id = id;
-    uint32_t clear_mask = (0xFFFFFFFF - (0x1 << irq_id));
+    uint32_t clear_mask = ~(1u << irq_id); // '1u' is an unsigned int
     if (active_test == 1 || active_test == 5) {
       // active_test 1 and 5 both run the one-at-a-time sequence (test1_impl),
       // test 5 with a relocated mtvec. CV32E20 interrupts are level-sensitive:

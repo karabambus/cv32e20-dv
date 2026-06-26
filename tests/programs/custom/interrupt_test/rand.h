@@ -10,8 +10,8 @@
 **   random_num32()        -> 32-bit pseudo-random value
 **   random_num(max, min)  -> value in the inclusive range [min, max]
 */
-#ifndef _RAND_H_
-#define _RAND_H_
+#ifndef _CV32E20_INTERRUPT_TEST_RAND_H_
+#define _CV32E20_INTERRUPT_TEST_RAND_H_
 
 #include <stdint.h>
 
@@ -39,4 +39,4 @@ static inline uint32_t random_num(uint32_t max, uint32_t min)
     return min + (random_num32() % span);
 }
 
-#endif /* _RAND_H_ */
+#endif /* _CV32E20_INTERRUPT_TEST_RAND_H_ */
