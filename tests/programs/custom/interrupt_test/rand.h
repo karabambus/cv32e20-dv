@@ -15,16 +15,16 @@
 
 #include <stdint.h>
 
-static uint32_t _rand_state = 0x1234ABCDu;
+static uint32_t rand_state = 0x1234ABCDu;
 
 static inline uint32_t random_num32(void)
 {
     /* xorshift32 */
-    uint32_t x = _rand_state;
+    uint32_t x = rand_state;
     x ^= x << 13;
     x ^= x >> 17;
     x ^= x << 5;
-    _rand_state = x;
+    rand_state = x;
     return x;
 }
 
