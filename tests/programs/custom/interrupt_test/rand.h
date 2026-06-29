@@ -15,10 +15,10 @@
 
 #include <stdint.h>
 
-static uint32_t rand_state = 0x1234ABCDu;
-
 static inline uint32_t random_num32(void)
 {
+    static uint32_t rand_state = 0x1234ABCDu;
+
     /* xorshift32 */
     uint32_t x = rand_state;
     x ^= x << 13;
