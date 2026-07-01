@@ -3,8 +3,7 @@
 #include <stdint.h>
 #include <time.h>
 
-#define TIMER_REG_ADDR         ((volatile uint32_t *) 0x15000000)
-#define TIMER_VAL_ADDR         ((volatile uint32_t *) 0x15000004)
+#include "cv32e20_dv.h"
 
 void mm_ram_assert_irq(uint32_t mask, uint32_t cycle_delay) {
     *TIMER_REG_ADDR = mask;
@@ -16,14 +15,44 @@ void enable_interrupts() {
     asm("csrs mstatus,%0" : : "r"(0x1 << 3));
 }
 
+/*
+ * CV32E20 (CVE2) interrupts are level-sensitive and the core has no
+ * irq_ack handshake, so the mm_ram timer IRQ stays asserted until software
+ * deasserts it (per the Exceptions and Interrupts spec).  Each handler must
+ * therefore clear the timer source before returning, otherwise the still-
+ * pending interrupt is re-taken immediately after MRET re-enables MIE and
+ * starves the branch instruction (infinite interrupt storm).  Clearing is
+ * done by re-arming the timer with mask=0 (count=1 reloads irq_q to 0 on the
+ * next cycle), matching the mechanism used by interrupt_test.
+ *
+ * The handlers run inside the tight branch-to-self loops in main(), where the
+ * only live registers are x18/x15 (loop operands) and x19; t0/t1 are dead
+ * there, so clobbering them is safe and avoids any C prologue/epilogue.
+ */
 void m_fast0_irq_handler(void) {
-    asm("addi x18,x18,1");
-    asm("mret");
+    __asm__ volatile (
+        "addi x18, x18, 1\n"      /* break the branch-taken loop          */
+        "li   t0, %0\n"           /* t0 = MM_TIMER_CTRL_ADDR               */
+        "sw   x0, 0(t0)\n"        /* TIMER_REG = 0  (mask cleared)         */
+        "li   t0, %1\n"           /* t0 = MM_TIMER_VAL_ADDR                */
+        "li   t1, 1\n"
+        "sw   t1, 0(t0)\n"        /* TIMER_VAL = 1  -> deassert irq line   */
+        "mret\n"
+        :: "i"(MM_TIMER_CTRL_ADDR), "i"(MM_TIMER_VAL_ADDR) : "t0", "t1", "memory"
+    );
 }
 
 void m_fast1_irq_handler(void) {
-    asm("addi x15,x15,1");
-    asm("mret");
+    __asm__ volatile (
+        "addi x15, x15, 1\n"
+        "li   t0, %0\n"           /* t0 = MM_TIMER_CTRL_ADDR               */
+        "sw   x0, 0(t0)\n"
+        "li   t0, %1\n"           /* t0 = MM_TIMER_VAL_ADDR                */
+        "li   t1, 1\n"
+        "sw   t1, 0(t0)\n"
+        "mret\n"
+        :: "i"(MM_TIMER_CTRL_ADDR), "i"(MM_TIMER_VAL_ADDR) : "t0", "t1", "memory"
+    );
 }
 
 int main() {
@@ -168,4 +197,8 @@ int main() {
         : "i"(a)
         : "x15"
     );
+
+    printf("All zero-offset branch tests escaped via interrupt\n");
+    TEST_PASSED;
+    return 0;
 }

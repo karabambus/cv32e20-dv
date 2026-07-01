@@ -34,6 +34,7 @@
 #include <stdlib.h>
 
 #include "all_csr_por.h"
+#include "cv32e20_dv.h"
 
 int main(int argc, char *argv[]) {
     printf("\n\nBegin Test\n");
@@ -45,6 +46,12 @@ int main(int argc, char *argv[]) {
     read_csr();
 
     printf("End Test\n\n");
+
+    // No standalone value checks here (this is the Imperas step-compare
+    // "proof of life" harness). Reaching this point means every CSR address
+    // 0x000-0xFFF was read and all illegal accesses were trapped and skipped
+    // by the BSP handler without hanging the core, so signal pass.
+    TEST_PASSED;
 
     return EXIT_SUCCESS;
 }

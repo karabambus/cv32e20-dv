@@ -38,6 +38,7 @@ Original Author: Shay Gal-on
    initial parameters, tun t he benchmark and report the results.
 */
 #include "coremark.h"
+#include "cv32e20_dv.h"
 
 /* Function: iterate
         Run the benchmark for a specified number of iterations.
@@ -454,6 +455,14 @@ for (i = 0; i < MULTITHREAD; i++)
 #endif
     /* And last call any target specific code for finalizing */
     portable_fini(&(results[0].port));
+
+    /* CV32E20 DV: signal pass/fail to the testbench status peripheral.
+     * total_errors == 0 means all CRCs validated against the known-good
+     * values for the configured seed (correct operation). */
+    if (total_errors == 0)
+        TEST_PASSED;
+    else
+        TEST_FAILED;
 
     return MAIN_RETURN_VAL;
 }
