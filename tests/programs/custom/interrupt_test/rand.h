@@ -1,4 +1,4 @@
-// Copyright 2026 Eclipse Foundation AISBL
+// Copyright (c) 2026 Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
 
 /*

@@ -28,6 +28,7 @@
 #   is addressed.
 ################################################################################
 .include "user_define.h"
+#include "cv32e20_dv.h"
 .section .text.start
 .globl _start
 .section .text
@@ -100,6 +101,14 @@ test_done:
     sw a1,0(a0)
 
     j test_pass
+
+# End-of-test exits.  These resolve the test_pass / test_fail labels the
+# self-checks above branch to, via the shared canonical macros in cv32e20_dv.h
+# (write 123456789 / 1 to the test-status port, then halt).
+test_pass:
+    TEST_PASS
+test_fail:
+    TEST_FAIL
 
 #
 # end

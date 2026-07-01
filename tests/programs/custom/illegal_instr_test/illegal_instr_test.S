@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+#include "cv32e20_dv.h"
 .globl _start
 .globl main
 .globl exit
@@ -47738,15 +47739,12 @@ main:
     lw      x5,4(sp)
     bne     x5, x25, fail
     addi    sp,sp,84
-    li x18, 1
     li x16, 47595      # this is the number of EXPECTED illegal instructions
     beq x31, x16, test_end
 fail:
-    li x18, 2
+    TEST_FAIL          # mismatch: signal failure (write 1) and halt
 test_end:
-    li x17, 0x20000000
-    sw x18,0(x17)
-    j _exit
+    TEST_PASS          # all expected illegal instructions seen: signal pass
 
 u_sw_irq_handler:
     li x30, 0xf

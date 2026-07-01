@@ -23,6 +23,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "cv32e20_dv.h"
+
 extern volatile uint32_t test_debugger_entry;
 
 #define MACHINE 3
@@ -35,9 +37,11 @@ int main(int argc, char *argv[])
     // Debug code will write 0xff to this register
     // If debug mode has not been entered, we will fail
     if ((check_reg & 0xff) == 0xa5) {
+        TEST_PASSED;        // canonical pass (123456789); meaningful only in uvmt
         return EXIT_SUCCESS;
     }
     else {
+        TEST_FAILED;        // canonical fail (1)
         return EXIT_FAILURE;
     }
 }
