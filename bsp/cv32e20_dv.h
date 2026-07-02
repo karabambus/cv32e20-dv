@@ -117,17 +117,21 @@
  *     test_pass: TEST_PASS
  *     test_fail: TEST_FAIL
  * ------------------------------------------------------------------------- */
+.equ MM_TESTSTATUS_ADDR, 0x20000000
+.equ TEST_RESULT_PASS, 123456789
+.equ TEST_RESULT_FAIL, 1
+
 .macro TEST_PASS
-    li   t0, 0x20000000          /* MM_TESTSTATUS_ADDR */
-    li   t1, 123456789           /* TEST_RESULT_PASS   */
+    li   t0, MM_TESTSTATUS_ADDR
+    li   t1, TEST_RESULT_PASS
     sw   t1, 0(t0)
 1:  wfi
     j    1b
 .endm
 
 .macro TEST_FAIL
-    li   t0, 0x20000000          /* MM_TESTSTATUS_ADDR */
-    li   t1, 1                   /* TEST_RESULT_FAIL   */
+    li   t0, MM_TESTSTATUS_ADDR
+    li   t1, TEST_RESULT_FAIL
     sw   t1, 0(t0)
 1:  wfi
     j    1b
