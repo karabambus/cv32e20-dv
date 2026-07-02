@@ -1,4 +1,4 @@
-// Copyright 2026 Eclipse Foundation AISBL
+// Copyright (c) 2026 Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
 //
 // cv32e20_dv.h - Shared definitions for the CV32E20 directed C test-programs.
@@ -15,6 +15,15 @@
 
 #ifndef CV32E20_DV_H
 #define CV32E20_DV_H
+
+/* -------------------------------------------------------------------------
+ * This header is shared by the C and the assembly directed test-programs.
+ * The C body below is hidden from the assembler (gcc defines __ASSEMBLER__
+ * when preprocessing a .S file); the assembly-only section at the end of the
+ * file provides the matching TEST_PASS / TEST_FAIL macros.  Keeping both in
+ * one file makes this the single source of truth for the pass/fail protocol.
+ * ------------------------------------------------------------------------- */
+#ifndef __ASSEMBLER__
 
 #include <stdint.h>
 
@@ -81,5 +90,53 @@
 
 #define TEST_PASSED  (MM_TESTSTATUS_REG = TEST_RESULT_PASS)
 #define TEST_FAILED  (MM_TESTSTATUS_REG = TEST_RESULT_FAIL)
+
+#else /* __ASSEMBLER__ */
+
+/* -------------------------------------------------------------------------
+ * Assembly view of the canonical pass/fail protocol.
+ *
+ * These GAS macros are the assembly counterpart of the C TEST_PASSED /
+ * TEST_FAILED macros above and signal end-of-test exactly the same way:
+ * write the canonical value to the test-status port (decoded by
+ * tb/core/mm_ram.sv) and then halt.  The literals are duplicated here
+ * because the C macros above (with their 'u' suffixes and pointer casts)
+ * are not assembler-parseable; keep these three numbers in step with
+ * MM_TESTSTATUS_ADDR / TEST_RESULT_PASS / TEST_RESULT_FAIL above.
+ *
+ * Each macro clobbers t0/t1 only and never returns (it spins on wfi), so it
+ * is safe to drop in at any end-of-test point.  Usage from a .S test:
+ *
+ *     #include "cv32e20_dv.h"
+ *     ...
+ *     TEST_PASS                 // or TEST_FAIL
+ *
+ * Tests whose existing control flow branches to labels named test_pass /
+ * test_fail can simply define those labels in terms of the macros:
+ *
+ *     test_pass: TEST_PASS
+ *     test_fail: TEST_FAIL
+ * ------------------------------------------------------------------------- */
+.equ MM_TESTSTATUS_ADDR, 0x20000000
+.equ TEST_RESULT_PASS, 123456789
+.equ TEST_RESULT_FAIL, 1
+
+.macro TEST_PASS
+    li   t0, MM_TESTSTATUS_ADDR
+    li   t1, TEST_RESULT_PASS
+    sw   t1, 0(t0)
+1:  wfi
+    j    1b
+.endm
+
+.macro TEST_FAIL
+    li   t0, MM_TESTSTATUS_ADDR
+    li   t1, TEST_RESULT_FAIL
+    sw   t1, 0(t0)
+1:  wfi
+    j    1b
+.endm
+
+#endif /* __ASSEMBLER__ */
 
 #endif /* CV32E20_DV_H */

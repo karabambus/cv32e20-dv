@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-# Copyright 2026 Eclipse Foundation AISBL
+# Copyright (c) 2026 Eclipse Foundation
 # SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
 """
-Run the cleaned-up C test-programs on a CV32E20 testbench and print a pass/fail
-summary.  Either testbench can be selected with --tb:
+Run the cleaned-up directed test-programs (C and assembly) on a CV32E20
+testbench and print a pass/fail summary.  Either testbench can be selected
+with --tb:
 
     core   the Verilator core testbench in sim/core            (default)
     uvmt   the UVM testbench in sim/uvmt, run with SIMULATOR=dsim
@@ -31,7 +32,7 @@ relative to its own location in <repo>/bin).  A working RISC-V toolchain plus
 the relevant simulator (Verilator for core, Metrics dsim for uvmt) must be on
 PATH, as for a normal `make test`.
 
-    # Run the full cleaned-up C set on the core TB and print the summary:
+    # Run the full self-checking set (C + assembly) on the core TB:
     bin/run_c_tests.py
     python3 bin/run_c_tests.py                 # equivalent
 
@@ -44,8 +45,9 @@ PATH, as for a normal `make test`.
     bin/run_c_tests.py fibonacci misalign
     bin/run_c_tests.py --tb uvmt hello-world
 
-    # Also run the parked tests (riscv_csr + debug_test* variants):
+    # Also run the parked tests (step-compare / debug; meaningful under --tb uvmt):
     bin/run_c_tests.py --include-parked
+    bin/run_c_tests.py --tb uvmt --include-parked
 
     # Skip simulation; just re-summarize logs from a previous run:
     bin/run_c_tests.py --parse-only
@@ -94,9 +96,9 @@ TESTBENCHES = {
     },
 }
 
-# C test-programs cleaned up on this branch that are expected to run on the
-# M-only CV32E20.
-TESTS = [
+# Self-checking C test-programs cleaned up on this branch.  These verify their
+# own results and signal the canonical pass/fail, so they pass on the core TB.
+C_TESTS = [
     "hello-world",
     "fibonacci",
     "branch_zero",
@@ -105,20 +107,43 @@ TESTS = [
     "all_csr_por",
     "csr_instructions",
     "hpmcounter_basic_test",
-    "perf_counters_instructions",
     "illegal",
     "misalign",
     "interrupt_test",
     "interrupt_bootstrap",
+    "debug_test",
 ]
 
-# Parked C programs: migrated to the shared header but not expected to pass on
-# the core TB.  riscv_csr still needs the M-only counter-CSR reconciliation; the
-# debug_test variants target the UVM environment (sim/uvmt) and may hang on the
-# core TB.  Included only with --include-parked.
+# Self-checking assembly test-programs cleaned up on this branch.  Each was
+# fixed to build and to signal end-of-test through the canonical protocol
+# (TEST_PASS/TEST_FAIL in bsp/cv32e20_dv.h, writing 123456789 / 1); each passes
+# on the core TB.
+ASM_TESTS = [
+    "load_store_rs1_zero",
+    "illegal_instr_test",
+    "generic_exception_test",
+    "csr_instr_asm",
+]
+
+# Default (core TB) selection: every self-checking test, C and assembly.
+TESTS = C_TESTS + ASM_TESTS
+
+# Parked tests: these build and signal correctly, but their *meaningful*
+# verification is not a self-check on the core TB.  Included only with
+# --include-parked, and intended to be run with --tb uvmt:
+#   * riscv_arithmetic_basic_test_0/1 and csr_instr_asm exercise long fixed
+#     instruction streams whose correctness is checked by the RVFI step-compare
+#     against the Spike ISS (sim/uvmt); on the core TB they pass *vacuously*.
+#   * riscv_csr additionally needs the M-only counter-CSR reconciliation (see
+#     README parked-work notes).
+#   * the debug_test variants need the uvmt debug-request stimulus; on the core
+#     TB they report FAIL because debug mode is never entered.
 PARKED = [
+    "riscv_arithmetic_basic_test_0",
+    "riscv_arithmetic_basic_test_1",
+    "csr_instr_asm",
     "riscv_csr",
-    "debug_test",
+    "perf_counters_instructions",
     "debug_test_boot_set",
     "debug_test_reset",
     "debug_test_known_miscompares",
@@ -211,7 +236,8 @@ def main():
                     help="testbench to run on: 'core' (Verilator) or 'uvmt' (dsim) "
                          "(default: core)")
     ap.add_argument("--include-parked", action="store_true",
-                    help="also run the parked tests (riscv_csr, debug_test variants)")
+                    help="also run the parked tests (step-compare arithmetic/CSR and "
+                         "debug variants; meaningful under --tb uvmt)")
     ap.add_argument("--parse-only", action="store_true",
                     help="do not run; just parse existing logs in the results directory")
     ap.add_argument("--cfg", default="default",

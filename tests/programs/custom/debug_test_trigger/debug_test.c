@@ -197,5 +197,6 @@ int main(int argc, char *argv[])
 
     printf("------------------------\n");
     printf("Finished \n");
+    TEST_PASSED;            // signal pass via the canonical protocol (123456789)
     return EXIT_SUCCESS;
 }

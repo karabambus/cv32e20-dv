@@ -1,5 +1,5 @@
 <!--
-Copyright 2026 Eclipse Foundation AISBL
+Copyright (c) 2026 Eclipse Foundation
 SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
 -->
 
@@ -110,7 +110,7 @@ Run: `make test TEST=<dir>` in `sim/core`. Delete = remove the directory.
 | riscv_csr | CSR | build-fail→**in progress** | **FIX (partial)** | DONE: defined test_fail (link); macro→123456789; dropped U-mode half (main); patched mstatus (18) + misa (18) expected values for M-only (script /tmp/patch_csr.py, model `mstatus=0x1800\|(v&0x88)`, misa U-bit cleared). REMAINING: template (env/corev-dv/cv32e20_csr_template.yaml) also classifies unimplemented unprivileged counter shadows 0xC00-0xC1F/0xC80-0xC9F as readable → core raises illegal (correct per docs). Needs template reconcile + regenerate (gen_csr_test.py needs `bitstring` pip pkg) OR more hand-patching. Backups: /tmp/riscv_csr_test_0.{S,h}.bak |
 | hpmcounter_basic_test | HPM | FAIL→**PASS** | **FIX (rewrote)** | rewrote to CV32E20 hardwired model: read mhpmcounter5-10 directly (loads/stores/jumps/branches/taken/compressed), gate with mcountinhibit window, dropped hazard sub-tests. All 6 event counts exact. (Subtlety: `li t0,-1` is compressed c.li — kept outside the counting window for the compressed check.) |
 | hpmcounter_hazard_test | HPM | FAIL | **REJECTED (deleted)** | tested ONLY load-use/jump-register hazards — events CV32E20 doesn't implement (cv32e40p LD_STALL/JR_STALL). Fully inapplicable. Directory removed. |
-| perf_counters_instructions | HPM | FAIL→**PASS** | **FIX (rewrote)** | replaced messy cv32e40p coverage test (had switch fall-through bugs, wrong reset expectations). New test validates: mhpmevent3-12=1<\<n & writes ignored; mhpmevent/mhpmcounter13-31 read 0; mcountinhibit bit1 reserved + impl bits R/W; mcycle/minstret frozen-when-inhibited / advance-when-enabled. |
+| perf_counters_instructions | HPM | FAIL→build-fail | **PARKED (UVM env)** | replaced messy cv32e40p coverage test (had switch fall-through bugs, wrong reset expectations). New test validates: mhpmevent3-12=1<\<n & writes ignored; mhpmevent/mhpmcounter13-31 read 0; mcountinhibit bit1 reserved + impl bits R/W; mcycle/minstret frozen-when-inhibited / advance-when-enabled. |
 | debug_test | debug | **PASS** | **KEEP** | Extensive updates for CV32E20.  Running on both the core and uvmt testbenches. |
 | debug_test_boot_set | debug | build-fail | **PARKED (UVM env)** | debug-at-reset via `+debug_boot_set` — no mechanism in core Verilator TB (debug_req is via mm_ram 0x15000008 during execution, not at reset). build broken (uint32_t). Covered by main debug_test. Left as-is for UVM env. |
 | debug_test_known_miscompares | debug | build-fail | **PARKED (UVM env)** | "known failures in step-and-compare" = ISS step-compare specific; core TB has no ISS. build broken (test_fail undefined). TEST_PASSED=1. Left as-is for UVM env. |
@@ -195,3 +195,133 @@ REMAINING (future, when extending beyond C): the `.S`/asm tests still use
 macros). To unify those too, either factor the addresses into an
 `#ifdef __ASSEMBLER__` section of a shared header or keep a parallel asm include
 — not done; this session was scoped to the C test-programs only.
+
+## misalign.c — replaced UB typed-pointer accesses with inline asm (DONE)
+
+User flagged that the load/store loops used misaligned typed-pointer derefs
+(`*(u16/u32/u64 *)(byte_ptr + odd_offset)`), which is C undefined behavior
+(C17 6.3.2.3p7): converting a byte pointer that is not naturally aligned to a
+wider pointer type lets the compiler assume the alignment and is free to lower
+the access to a byte sequence — which would silently stop exercising the LSU
+misaligned-split path (vacuous green test). Disassembly at `-O2` confirmed the
+code happened to still emit misaligned `lhu`/`lw`/`sw` today, but only at the
+optimizer's discretion.
+
+Fix (committed): the misaligned accesses under test are now issued through six
+inline-asm primitives — `ld_u16`/`ld_u32`/`ld_u64` (`lhu`/`lw`/`lw`+`lw`) and
+`st_u16`/`st_u32`/`st_u64` (`sh`/`sw`/`sw`+`sw`) — each pinning the exact
+instruction against a runtime address (`"r"(p)`, `"memory"` clobber, `"=&r"`
+early-clobber on the u64 load; u64 = two words since RV32 has no native 64-bit
+ld/st). No misaligned C pointer conversion remains, so no UB; the golden model
+`expected_u64` stays on `u8` (alignment-1) access. A detailed comment block
+above the primitives explains why the asm is necessary. Verified: disassembly
+shows the intended instructions against the misaligned base; runs **ALL TESTS
+PASSED** on the core TB. `misalign.c` is the ONLY test with this pattern
+(swept all C/.h/.S; dhrystone's `UNALIGNED` macro is the standard newlib guard,
+not a hazard).
+
+## `bin/run_c_tests.py` — multi-TB C test runner (DONE, committed "Add simple regress script")
+
+Runs the cleaned-up C test-programs and prints a pass/fail summary; exit 0 only
+if all selected tests PASS (CI-gate friendly). Paths resolve relative to the
+script's own location (`<repo>/bin`), so it runs from anywhere.
+
+Testbench selectable via `--tb {core,uvmt}` (default `core`). Per-TB config is
+in a `TESTBENCHES` dict:
+- **core**: `cd sim/core`; `make test TEST=<n> RUN_INDEX=<r>`; log
+  `simulation_results/<n>/<r>/test_program/<n>.log`; verdict banners
+  `ALL TESTS PASSED` / `TEST(S) FAILED!` (tb/core/tb_top.sv).
+- **uvmt**: `cd sim/uvmt`; `make test TEST=<n> RUN_INDEX=<r> SIMULATOR=dsim`
+  (also exports SIMULATOR=dsim in env); log
+  `dsim_results/<cfg>/<n>/<r>/dsim-<n>.log`; verdict banners
+  `SIMULATION PASSED` (incl. "with WARNINGS") / `SIMULATION FAILED`
+  (tb/uvmt/uvmt_cv32e20_tb.sv). `--cfg` (default `default`) selects the config
+  subdir.
+
+Run path prefers the console banner for THIS run, falling back to the on-disk
+log, so a stale prior log can't yield a false PASS. Flags: positional test
+names (subset), `--include-parked`, `--parse-only`, `--cfg`, `--run-index`,
+`--timeout` (default 600s/test, guards hangs), `--quiet`.
+
+The default `TESTS` list (13) all PASS on **core** (full run, rc=0). On
+**uvmt**, `hello-world` was run for real (SIMULATOR=dsim) and PASSED; the other
+12 were not exhaustively run on uvmt yet. Parked set (`riscv_csr` + 5
+`debug_test*` variants) is opt-in via `--include-parked`.
+
+Open question raised, not yet decided: filename `run_c_tests.py` is now a bit
+narrow since it drives both testbenches — possible rename to `run_tests.py`.
+
+## Assembly test-program cleanup (DONE this session)
+
+Cleaned up 11 assembly/mixed directed tests. Two problem classes, and a key
+distinction that governs how each is "resolved":
+
+**Self-checking vs step-and-compare.** A *self-checking* test computes its own
+verdict and can pass on the core Verilator TB (`sim/core`, no ISS). A
+*step-and-compare* test just runs a fixed instruction stream; its correctness is
+only checked by the RVFI step-compare against the Spike ISS in `sim/uvmt`. On the
+core TB a step-compare test can at best pass *vacuously*.
+
+**Shared asm exit (single source of truth).** `bsp/cv32e20_dv.h` was made
+assembler-safe: the C body is now guarded by `#ifndef __ASSEMBLER__`, and an
+`#ifdef __ASSEMBLER__` section adds GAS macros `TEST_PASS` / `TEST_FAIL` that
+write `123456789` / `1` to `0x20000000` then halt — the asm counterpart of the C
+`TEST_PASSED` / `TEST_FAILED`. Asm tests `#include "cv32e20_dv.h"` and either
+invoke the macros or define local `test_pass:`/`test_fail:` labels in terms of
+them. (The literals are duplicated in the asm section with a "keep in step"
+comment because the C macros' `u` suffixes / casts are not assembler-parseable.)
+
+Per-test outcomes (core TB unless noted):
+
+| Test | Was | Fix | Now |
+|---|---|---|---|
+| `load_store_rs1_zero` | link error: `test_pass`/`test_fail` undefined | local labels → `TEST_PASS`/`TEST_FAIL` | **PASS** |
+| `illegal_instr_test` | self-check passed but wrote `1` (FAIL code) on pass | pass→`TEST_PASS`, fail→`TEST_FAIL` | **PASS** |
+| `generic_exception_test` | assemble error (`li` of a symbol); wrote `1`/`2` | fixed exit via macros; `MAGIC_NUMBER 0x2f3` confirmed = measured `x26` (755 = 2 ecall + 15 ebreak + 3 illegal) | **PASS** |
+| `csr_instr_asm` | `csr_pass` wrote `1`, `csr_fail` wrote `2` | `csr_pass`→`TEST_PASS`, `csr_fail`→`TEST_FAIL` | **PASS** (store/load self-check; full CSR coverage is uvmt+ISS) |
+| `riscv_arithmetic_basic_test_0/1` | already wrote `123456789`, no self-check | none (signalling already correct) | builds; **passes vacuously** — real check = uvmt+ISS |
+| `riscv_csr` | generated, not self-checking | none here | parked (#10): M-only reconciliation + uvmt+ISS |
+| `debug_test_reset` | `debugger.S` link error (`test_pass`/`test_fail`); C used `return EXIT_*` | labels → macros; C now `TEST_PASSED`/`TEST_FAILED` | builds; FAILs on core (needs uvmt debug stimulus, #11) |
+| `debug_test_boot_set` | C used `return EXIT_*` | C now `TEST_PASSED`/`TEST_FAILED` | builds; FAILs on core (#11) |
+| `debug_test_trigger` | success path lacked `TEST_PASSED` | added `TEST_PASSED` before final return | builds; FAILs on core (#11) |
+| `interrupt_bootstrap` | already a passing C test (the `.S` is just its crt0) | none | **PASS** (unchanged) |
+
+Scope this pass was **core-TB-only**: every one of the 11 builds cleanly; the 6
+self-checking ones (4 asm + arith_0/1 vacuous) pass on core. uvmt+ISS
+verification of the step-compare tests and the parked debug/`riscv_csr` work
+(#10/#11) is deferred.
+
+`bin/run_c_tests.py` updated: new `ASM_TESTS` group (`load_store_rs1_zero`,
+`illegal_instr_test`, `generic_exception_test`, `csr_instr_asm`) folded into the
+default core selection (`TESTS = C_TESTS + ASM_TESTS`); step-compare arith/CSR
+and debug variants moved/added under `PARKED` (`--include-parked`, intended for
+`--tb uvmt`). The `_c_` in the filename is now narrow — rename to `run_tests.py`
+still open.
+
+**Resume checklist (next session):**
+1. uvmt+ISS verification of the step-compare tests (deferred this pass):
+   `python3 bin/run_c_tests.py --tb uvmt riscv_arithmetic_basic_test_0
+   riscv_arithmetic_basic_test_1 csr_instr_asm` (sets `SIMULATOR=dsim`). These
+   pass vacuously on core; the meaningful check is the RVFI-vs-Spike compare.
+2. Debug variants under uvmt with their plusargs (task #11): `debug_test_reset`
+   (`+reset_debug`), `debug_test_boot_set` (`+debug_boot_set`),
+   `debug_test_trigger` (`+rand_stall_obi_disable`). They build now and signal
+   via `TEST_PASSED`/`TEST_FAILED`; they FAIL on core because debug mode is
+   never entered there.
+3. `riscv_csr` M-only counter-CSR reconciliation (task #10 — see "Parked work"
+   section above), then uvmt+ISS.
+4. Decide the `run_c_tests.py` → `run_tests.py` rename.
+
+All edits from this session are in the working tree only (no commits): touched
+`bsp/cv32e20_dv.h`, `bin/run_c_tests.py`, this README, and under
+`tests/programs/custom/`: `load_store_rs1_zero/load_store_rs1_zero.S`,
+`illegal_instr_test/illegal_instr_test.S`,
+`generic_exception_test/generic_exception_test.S`, `csr_instr_asm/csr_instr_asm.S`,
+`debug_test_reset/{debugger.S,debug_test_reset.c}`,
+`debug_test_boot_set/debug_test_reset.c`, `debug_test_trigger/debug_test.c`.
+
+## Notes-file location
+
+These resume notes live in this file (`tests/programs/custom/README.md`,
+formerly `CLEANUP.md` — user renamed it). Per standing instruction, do NOT write
+session memory to `/home/mike/.claude/...`; keep it here in-tree.

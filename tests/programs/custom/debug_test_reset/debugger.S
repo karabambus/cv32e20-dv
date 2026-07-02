@@ -21,6 +21,8 @@
 */
 
 
+#include "cv32e20_dv.h"
+
 .section .debugger, "ax"
 .global _debugger_start
 .set test_debugger_ok, 0xa5
@@ -474,6 +476,13 @@ _debugger_trigger_regs_access:
 
 _debugger_error:
     j test_fail
+
+# End-of-test exits for the debugger code: resolve the test_pass / test_fail
+# jump targets above via the shared canonical macros in cv32e20_dv.h.
+test_pass:
+    TEST_PASS
+test_fail:
+    TEST_FAIL
 
 .section .data
 .global test_debugger_entry

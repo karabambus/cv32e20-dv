@@ -23,6 +23,7 @@
 # reference model to check results.
 ################################################################################
 .include "user_define.h"
+#include "cv32e20_dv.h"
 .section .text.start
 .globl _start
 .section .text
@@ -6292,10 +6293,7 @@ extra_store_load:
     bne x16, x18, csr_fail
 
 csr_pass:
-    li x18, 1
-    li x17, 0x20000000
-    sw x18,0(x17)
-    wfi
+    TEST_PASS
 
 csr_fail:
     lui a0,print_port>>12
@@ -6323,10 +6321,7 @@ csr_fail:
     sw a1,0(a0)
     sw a1,0(a0)
 
-    li x18, 2
-    li x17, 0x20000000
-    sw x18,0(x17)
-    wfi
+    TEST_FAIL
 #
 # end
 #
