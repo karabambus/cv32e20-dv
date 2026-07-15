@@ -114,7 +114,7 @@ class uvme_cv32e20_interrupt_noise_c extends uvme_cv32e20_base_vseq_c;
    extern virtual task rand_delay();
 
    /**
-    * Watches the RVFI instruction retirement interface and triggers wfi_retired_e each
+    * Watches the RVFI instruction retirement interface and puts a token into wfi_sem each
     * time a WFI instruction retires.
     */
    extern virtual task wfi_monitor();
