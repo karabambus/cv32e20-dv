@@ -294,11 +294,24 @@ class cv32e20_asm_program_gen extends corev_asm_program_gen;
     end
   endfunction
 
+  // Signal end-of-test
+  // In the "core" testbench this is done via the testbench's memory-mapped
+  // test-status port (tb/core/mm_ram.sv). In the "uvmt" environment it is
+  // handled by an OBI Agent virtual sequence (in env/uvme/vseq/uvme_cv32e20_vp_status_flags_seq.sv).
+  // This is the same protocol the directed C/asm tests use
+  // (see bsp/cv32e20_dv.h TEST_PASS / MM_TESTSTATUS_ADDR / TEST_RESULT_PASS).
+  // TODO: use symbols, from the linker script, to get the above symbol values.
   virtual function void gen_test_done();
     string str = format_string("test_done:", LABEL_STR_LEN);
     instr_stream.push_back(str);
-    instr_stream.push_back({indent, "li gp, 1"});
-    instr_stream.push_back({indent, "j write_tohost"});
+    instr_stream.push_back({indent, "csrrci x0, mstatus, 0x8  # clear MSTATUS.MIE"});
+    instr_stream.push_back({indent, "csrrwi x0, mie, 0        # mask all interrupts, final wfi must not wake"});
+    instr_stream.push_back({indent, "li     t0, 0x20000000    # MM_TESTSTATUS_ADDR, see bsp/cv32e20_dv.h"});
+    instr_stream.push_back({indent, "li     t1, 123456789     # TEST_RESULT_PASS, see bsp/cv32e20_dv.h"});
+    instr_stream.push_back({indent, "sw     t1, 0(t0)"});
+    instr_stream.push_back("1:");
+    instr_stream.push_back({indent, "wfi"});
+    instr_stream.push_back({indent, "j 1b"});
   endfunction
 
 endclass : cv32e20_asm_program_gen

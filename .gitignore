@@ -54,3 +54,4 @@ ucli.key
 vcs.cmd
 venv*
 /dist/
+.claude
