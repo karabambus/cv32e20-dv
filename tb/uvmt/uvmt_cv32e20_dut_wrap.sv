@@ -86,6 +86,8 @@ module uvmt_cv32e20_dut_wrap #(
     assign debug_if.clk      = clknrst_if.clk;
     assign debug_if.reset_n  = clknrst_if.reset_n;
     assign debug_req_uvma    = debug_if.debug_req;
+    // FIXME: need a sol'n that does not require probing the core RTL.
+    assign debug_if.id_in_ready = cv32e20_top_i.u_cve2_top.u_cve2_core.id_stage_i.controller_i.id_in_ready_o;
 
     assign debug_req = debug_req_vp | debug_req_uvma;
 
@@ -103,6 +105,8 @@ module uvmt_cv32e20_dut_wrap #(
     assign interrupt_if.irq_id                  = cv32e20_top_i.u_cve2_top.u_cve2_core.id_stage_i.controller_i.exc_cause_o[4:0]; //irq_id;
 //    assign interrupt_if.irq_ack                 = cv32e20_top_i.u_cve2_top.u_cve2_core.id_stage_i.controller_i.handle_irq; //irq_ack;
     assign interrupt_if.irq_ack                 = (cv32e20_top_i.u_cve2_top.u_cve2_core.id_stage_i.controller_i.ctrl_fsm_cs == 4'h7);//irq_ack
+    // FIXME: need a sol'n that does not require probing the core RTL.
+    assign interrupt_if.id_in_ready             = cv32e20_top_i.u_cve2_top.u_cve2_core.id_stage_i.controller_i.id_in_ready_o;
 
     assign vp_interrupt_if.clk                  = clknrst_if.clk;
     assign vp_interrupt_if.reset_n              = clknrst_if.reset_n;
@@ -111,6 +115,8 @@ module uvmt_cv32e20_dut_wrap #(
     // was vp_interrupt_if.irq;
     assign vp_interrupt_if.irq_id               = cv32e20_top_i.u_cve2_top.u_cve2_core.id_stage_i.controller_i.exc_cause_o[4:0];    //irq_id;
     assign vp_interrupt_if.irq_ack              = (cv32e20_top_i.u_cve2_top.u_cve2_core.id_stage_i.controller_i.ctrl_fsm_cs == 4'h7);//irq_ack
+    // FIXME: need a sol'n that does not require probing the core RTL.
+    assign vp_interrupt_if.id_in_ready          = cv32e20_top_i.u_cve2_top.u_cve2_core.id_stage_i.controller_i.id_in_ready_o;
 
     assign irq = irq_uvma | irq_vp;
 

@@ -82,6 +82,7 @@ CFG             ?= default
 GEN_START_INDEX ?= 0
 GEN_NUM_TESTS   ?= 1
 export RUN_INDEX       ?= 0
+OPT_RUN_INDEX_SUFFIX    = _$(RUN_INDEX)
 
 # Common output directories
 SIM_RESULTS             ?= $(if $(CV_RESULTS),$(abspath $(CV_RESULTS))/$(SIMULATOR)_results,$(MAKE_PATH)/$(SIMULATOR)_results)
@@ -103,39 +104,6 @@ EMB_BUILD_ONLY_ARG  = $(if $(filter $(YES_VALS),$(EMB_BUILD_ONLY)),YES,NO)
 EMB_DEBUG_ARG       = $(if $(filter $(YES_VALS),$(EMB_DEBUG)),YES,NO)
 
 # UVM Environment
-# OLD
-#export DV_UVMT_PATH             = $(CV32E20_DV)/$(CV_CORE_LC)/tb/uvmt
-#export DV_UVME_PATH             = $(CV32E20_DV)/$(CV_CORE_LC)/env/uvme
-#export DV_UVML_HRTBT_PATH       = $(CV32E20_DV)/lib/uvm_libs/uvml_hrtbt
-#export DV_UVMA_CORE_CNTRL_PATH  = $(CV32E20_DV)/lib/uvm_agents/uvma_core_cntrl
-#export DV_UVMA_ISACOV_PATH      = $(CV32E20_DV)/lib/uvm_agents/uvma_isacov
-#export DV_UVMA_RVFI_PATH        = $(CV32E20_DV)/lib/uvm_agents/uvma_rvfi
-#export DV_UVMA_RVVI_PATH        = $(CV32E20_DV)/lib/uvm_agents/uvma_rvvi
-#export DV_UVMA_RVVI_OVPSIM_PATH = $(CV32E20_DV)/lib/uvm_agents/uvma_rvvi_ovpsim
-#export DV_UVMA_CLKNRST_PATH     = $(CV32E20_DV)/lib/uvm_agents/uvma_clknrst
-#export DV_UVMA_INTERRUPT_PATH   = $(CV32E20_DV)/lib/uvm_agents/uvma_interrupt
-#export DV_UVMA_DEBUG_PATH       = $(CV32E20_DV)/lib/uvm_agents/uvma_debug
-#export DV_UVMA_PMA_PATH         = $(CV32E20_DV)/lib/uvm_agents/uvma_pma
-#export DV_UVMA_OBI_MEMORY_PATH  = $(CV32E20_DV)/lib/uvm_agents/uvma_obi_memory
-#export DV_UVMA_FENCEI_PATH      = $(CV32E20_DV)/lib/uvm_agents/uvma_fencei
-#export DV_UVML_TRN_PATH         = $(CV32E20_DV)/lib/uvm_libs/uvml_trn
-#export DV_UVML_LOGS_PATH        = $(CV32E20_DV)/lib/uvm_libs/uvml_logs
-#export DV_UVML_SB_PATH          = $(CV32E20_DV)/lib/uvm_libs/uvml_sb
-#export DV_UVML_MEM_PATH         = $(CV32E20_DV)/lib/uvm_libs/uvml_mem
-#
-#export DV_UVMC_RVFI_SCOREBOARD_PATH      = $(CV32E20_DV)/lib/uvm_components/uvmc_rvfi_scoreboard/
-#export DV_UVMC_RVFI_REFERENCE_MODEL_PATH = $(CV32E20_DV)/lib/uvm_components/uvmc_rvfi_reference_model/
-#
-#export DV_OVPM_HOME             = $(CV32E20_DV)/vendor_lib/imperas
-#export DV_OVPM_MODEL            = $(DV_OVPM_HOME)/imperas_DV_COREV
-#
-#export DV_OVPM_DESIGN           = $(DV_OVPM_HOME)/design
-#
-#export DV_SVLIB_PATH            = $(CV32E20_DV)/$(CV_CORE_LC)/vendor_lib/verilab
-#
-#DV_UVMT_SRCS                  = $(wildcard $(DV_UVMT_PATH)/*.sv))
-
-# NEW NEW NEW!!!
 export DV_UVMT_PATH             = $(CV32E20_DV)/tb/uvmt
 export DV_UVME_PATH             = $(CV32E20_DV)/env/uvme
 export DV_UVML_HRTBT_PATH       = $(CV_VERIF_PKG)/lib/uvm_libs/uvml_hrtbt
@@ -172,10 +140,14 @@ DV_UVMT_SRCS                  = $(wildcard $(DV_UVMT_PATH)/*.sv))
 UVM_TEST_NAME ?= uvmt_$(CV_CORE_LC)_general_purpose_test_c
 TEST_UVM_TEST ?= $(UVM_TEST_NAME)
 
+# CORE-V-VERIF
+CV_VERIF_PKG        := $(CV32E20_DV)/vendor_lib/openhwgroup_core-v-verif
+export CV_VERIF_PKG  = $(CV32E20_DV)/vendor_lib/openhwgroup_core-v-verif
+
 # Google's random instruction generator
-RISCVDV_PKG         := $(CV32E20_DV)/$(CV_CORE_LC)/vendor_lib/google/riscv-dv
-COREVDV_PKG         := $(CV32E20_DV)/lib/corev-dv
-CV_CORE_COREVDV_PKG := $(CV32E20_DV)/$(CV_CORE_LC)/env/corev-dv
+RISCVDV_PKG         := $(CV32E20_DV)/vendor_lib/google/riscv-dv
+COREVDV_PKG         := $(CV_VERIF_PKG)/lib/corev-dv
+CV_CORE_COREVDV_PKG := $(CV32E20_DV)/env/corev-dv
 export RISCV_DV_ROOT         = $(RISCVDV_PKG)
 export COREV_DV_ROOT         = $(COREVDV_PKG)
 export CV_CORE_COREV_DV_ROOT = $(CV_CORE_COREVDV_PKG)
@@ -215,12 +187,6 @@ export DESIGN_RTL_DIR = $(CV_CORE_PKG)/rtl
 
 RTLSRC_HOME   := $(CV_CORE_PKG)/rtl
 RTLSRC_INCDIR := $(RTLSRC_HOME)/include
-
-# CORE-V-VERIF
-#CV_VERIF_PKG        := $(CV32E20_DV)/$(CV_CORE_LC)/vendor_lib/openhwgroup_core-v-verif
-#export CV_VERIF_PKG  = $(CV32E20_DV)/$(CV_CORE_LC)/vendor_lib/openhwgroup_core-v-verif
-CV_VERIF_PKG        := $(CV32E20_DV)/vendor_lib/openhwgroup_core-v-verif
-export CV_VERIF_PKG  = $(CV32E20_DV)/vendor_lib/openhwgroup_core-v-verif
 
 # RVVI
 #RVVI_HOME             := $(CV32E20_DV)/$(CV_CORE_LC)/vendor_lib/riscv-verification/RVVI

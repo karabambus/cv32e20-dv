@@ -220,7 +220,7 @@ PASSED** on the core TB. `misalign.c` is the ONLY test with this pattern
 (swept all C/.h/.S; dhrystone's `UNALIGNED` macro is the standard newlib guard,
 not a hazard).
 
-## `bin/run_c_tests.py` — multi-TB C test runner (DONE, committed "Add simple regress script")
+## `bin/run_tests.py` — multi-TB test runner (DONE, committed "Add simple regress script"; renamed from `run_c_tests.py`)
 
 Runs the cleaned-up C test-programs and prints a pass/fail summary; exit 0 only
 if all selected tests PASS (CI-gate friendly). Paths resolve relative to the
@@ -248,8 +248,10 @@ The default `TESTS` list (13) all PASS on **core** (full run, rc=0). On
 12 were not exhaustively run on uvmt yet. Parked set (`riscv_csr` + 5
 `debug_test*` variants) is opt-in via `--include-parked`.
 
-Open question raised, not yet decided: filename `run_c_tests.py` is now a bit
-narrow since it drives both testbenches — possible rename to `run_tests.py`.
+Resolved: renamed `run_c_tests.py` → `run_tests.py`, since it drives both C
+and assembly tests. Also added `--corev-dv-only` (run just COREV_DV_TESTS,
+nothing else) and an automatic one-time `make corev-dv` setup step, run
+before any corev-dv test builds whenever the selected set includes one.
 
 ## Assembly test-program cleanup (DONE this session)
 
@@ -291,16 +293,15 @@ self-checking ones (4 asm + arith_0/1 vacuous) pass on core. uvmt+ISS
 verification of the step-compare tests and the parked debug/`riscv_csr` work
 (#10/#11) is deferred.
 
-`bin/run_c_tests.py` updated: new `ASM_TESTS` group (`load_store_rs1_zero`,
-`illegal_instr_test`, `generic_exception_test`, `csr_instr_asm`) folded into the
-default core selection (`TESTS = C_TESTS + ASM_TESTS`); step-compare arith/CSR
-and debug variants moved/added under `PARKED` (`--include-parked`, intended for
-`--tb uvmt`). The `_c_` in the filename is now narrow — rename to `run_tests.py`
-still open.
+`bin/run_tests.py` (then still `run_c_tests.py`) updated: new `ASM_TESTS` group
+(`load_store_rs1_zero`, `illegal_instr_test`, `generic_exception_test`,
+`csr_instr_asm`) folded into the default core selection
+(`TESTS = C_TESTS + ASM_TESTS`); step-compare arith/CSR and debug variants
+moved/added under `PARKED` (`--include-parked`, intended for `--tb uvmt`).
 
 **Resume checklist (next session):**
 1. uvmt+ISS verification of the step-compare tests (deferred this pass):
-   `python3 bin/run_c_tests.py --tb uvmt riscv_arithmetic_basic_test_0
+   `python3 bin/run_tests.py --tb uvmt riscv_arithmetic_basic_test_0
    riscv_arithmetic_basic_test_1 csr_instr_asm` (sets `SIMULATOR=dsim`). These
    pass vacuously on core; the meaningful check is the RVFI-vs-Spike compare.
 2. Debug variants under uvmt with their plusargs (task #11): `debug_test_reset`
@@ -310,10 +311,10 @@ still open.
    never entered there.
 3. `riscv_csr` M-only counter-CSR reconciliation (task #10 — see "Parked work"
    section above), then uvmt+ISS.
-4. Decide the `run_c_tests.py` → `run_tests.py` rename.
+4. ~~Decide the `run_c_tests.py` → `run_tests.py` rename.~~ Done.
 
 All edits from this session are in the working tree only (no commits): touched
-`bsp/cv32e20_dv.h`, `bin/run_c_tests.py`, this README, and under
+`bsp/cv32e20_dv.h`, `bin/run_tests.py` (then `run_c_tests.py`), this README, and under
 `tests/programs/custom/`: `load_store_rs1_zero/load_store_rs1_zero.S`,
 `illegal_instr_test/illegal_instr_test.S`,
 `generic_exception_test/generic_exception_test.S`, `csr_instr_asm/csr_instr_asm.S`,
