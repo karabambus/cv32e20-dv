@@ -68,7 +68,7 @@ PATH, as for a normal `make test`.
     # Other options:
     #   --cfg NAME      uvmt config subdirectory                (default: default)
     #   --run-index N   RUN_INDEX subdirectory                  (default: 0)
-    #   --timeout SECS  per-test timeout                        (default: 600)
+    #   --timeout SECS  per-test timeout                        (default: 1800)
     #   --quiet         suppress per-test simulation banners
     #   -h / --help     full option help
 
@@ -78,6 +78,7 @@ suitable for use as a CI gate.
 
 import argparse
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -100,7 +101,7 @@ TESTBENCHES = {
     },
     "uvmt": {
         "sim_dir": REPO / "sim" / "uvmt",
-        "make_args": ["SIMULATOR=vsim"],
+        "make_args": ["SIMULATOR=vsim", "USE_ISS=NO"],
         "pass_banner": "SIMULATION PASSED",
         "fail_banner": "SIMULATION FAILED",
         "markers": ("SIMULATION PASSED", "SIMULATION FAILED",
@@ -166,7 +167,7 @@ PARKED = [
 # templates under tests/programs/corev-dv/.  Unlike C_TESTS/ASM_TESTS/PARKED,
 # each of these needs its randomized test program generated before it can be
 # built and run, i.e. `make gen_corev-dv test TEST=<name>` rather than plain
-# `make test TEST=<name>` -- run_test() adds the extra target automatically for
+# `make test TEST=<name>`, where run_test() adds the extra target automatically for
 # names in this list. Meaningful only under --tb uvmt (corev-dv generation is
 # wired up for the uvmt testbench only); included only with --include-corev-dv
 # or --corev-dv-only.
@@ -175,30 +176,15 @@ PARKED = [
 # corev-dv/riscv-dv packages) must have been run once in sim/uvmt; main() does
 # this automatically whenever the selected set includes a corev-dv test.
 #
-# This is the set confirmed passing (0 UVM_ERROR/UVM_FATAL, clean end-of-test)
-# with SIMULATOR=vsim as of 2026-07-14, after: the mk/uvmt/uvmt.mk corev-dv
-# path-wiring fix and OPT_RUN_INDEX_SUFFIX fix; the exception_req_withdrawn SVA
-# fix in core-v-cores/cv32e20/rtl/cve2_controller.sv (verification-only
-# bookkeeping, no functional RTL change); the RVFI-gated interrupt-noise
-# throttle in env/uvme/vseq/uvme_cv32e20_interrupt_noise_vseq.sv; and reverting
-# the id_in_ready driver-side wait in uvma_interrupt_drv.sv/uvma_debug_drv.sv
-# (it could deadlock a core parked in WFI).  See
-# E20DV/tmp/exception_req_pending_finding.md and the cv32e20-corev-dv-restore
-# project memory for the full investigation.
-#
-# Not yet included:
-#   * corev_rand_interrupt_exception -- completes cleanly (no livelock) but
-#     still hits one residual CVE2SetExceptionPCOnSpecialReqIfExpected
-#     assertion during a rapid back-to-back exception-retrigger burst; root
-#     cause not yet confirmed.
-#   * corev_rand_debug, corev_rand_debug_ebreak, corev_rand_debug_single_step,
-#     corev_rand_illegal_instr_test, corev_rand_instr_long_stall -- not yet run
-#     against the current fixes.
+# Not yet included: corev_rand_debug, corev_rand_debug_ebreak,
+# corev_rand_debug_single_step, corev_rand_illegal_instr_test,
+# corev_rand_instr_long_stall -- not yet run against the current fixes.
 COREV_DV_TESTS = [
     "corev_rand_arithmetic_base_test",
     "corev_rand_instr_test",
     "corev_rand_interrupt",
     "corev_rand_interrupt_debug",
+    "corev_rand_interrupt_exception",
     "corev_rand_interrupt_nested",
     "corev_rand_interrupt_wfi",
     "corev_rand_interrupt_wfi_mem_stress",
@@ -238,6 +224,30 @@ def make_env(tbcfg):
     return env
 
 
+def _run(cmd, cwd, env, timeout, capture):
+    """Run cmd in its own process group (session) so a timeout can kill the
+    whole tree, not just the immediate child. Without this, a `make` that
+    times out leaves its own child (e.g. vsim) running as an orphan: the
+    simulation keeps going for real in the background while the script
+    reports a false timeout and moves on to the next test."""
+    proc = subprocess.Popen(
+        cmd,
+        cwd=cwd,
+        env=env,
+        start_new_session=True,
+        stdout=subprocess.PIPE if capture else None,
+        stderr=subprocess.PIPE if capture else None,
+        text=True,
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        proc.communicate()
+        raise
+    return proc.returncode, stdout, stderr
+
+
 def setup_corev_dv(tb, timeout):
     """Run `make corev-dv` once: clones and compiles the corev-dv/riscv-dv
     packages.  Required before any COREV_DV_TESTS entry can build; aborts the
@@ -248,14 +258,14 @@ def setup_corev_dv(tb, timeout):
 
     print(f"[Setup/{tb}] make corev-dv ...")
     try:
-        proc = subprocess.run(cmd, cwd=tbcfg["sim_dir"], timeout=timeout, env=env)
+        returncode, _, _ = _run(cmd, tbcfg["sim_dir"], env, timeout, capture=False)
     except subprocess.TimeoutExpired:
         sys.exit(f"error: 'make corev-dv' timed out after {timeout}s")
     except OSError as exc:
         sys.exit(f"error: could not launch 'make corev-dv': {exc}")
 
-    if proc.returncode != 0:
-        sys.exit(f"error: 'make corev-dv' failed (exit {proc.returncode}); "
+    if returncode != 0:
+        sys.exit(f"error: 'make corev-dv' failed (exit {returncode}); "
                   "no corev-dv test can build without it")
 
 
@@ -263,32 +273,32 @@ def run_test(tb, test, run_index, cfg, timeout, quiet):
     """Build+run one test on the chosen testbench; return (outcome, detail)."""
     tbcfg = TESTBENCHES[tb]
     targets = ["gen_corev-dv", "test"] if test in COREV_DV_TESTS else ["test"]
-    cmd = (["make"] + targets + [f"TEST={test}", f"RUN_INDEX={run_index}"]
-           + tbcfg["make_args"])
+    cmd = ["make"] + targets + [f"TEST={test}", f"RUN_INDEX={run_index}"]
+    if test in COREV_DV_TESTS:
+        # gen_corev-dv generates into <test>/$(GEN_START_INDEX)/test_program/,
+        # independently of RUN_INDEX (which only selects where the build/run
+        # step looks for that program). Without this, a non-zero --run-index
+        # generates into .../0/ but builds/runs out of .../<run_index>/, which
+        # is empty except for the BSP.
+        cmd.append(f"GEN_START_INDEX={run_index}")
+    cmd += tbcfg["make_args"]
     env = make_env(tbcfg)
 
     try:
-        proc = subprocess.run(
-            cmd,
-            cwd=tbcfg["sim_dir"],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=env,
-        )
+        returncode, stdout, stderr = _run(cmd, tbcfg["sim_dir"], env, timeout, capture=True)
     except subprocess.TimeoutExpired:
         return "ERROR", f"timed out after {timeout}s"
     except OSError as exc:
         return "ERROR", f"could not launch make: {exc}"
 
     if not quiet:
-        for line in proc.stdout.splitlines():
+        for line in stdout.splitlines():
             if any(m in line for m in tbcfg["markers"]):
                 print("    " + line)
 
     # The console output is authoritative for the run we just launched; fall
     # back to the on-disk log if the banner did not reach stdout.
-    console = proc.stdout + proc.stderr
+    console = stdout + stderr
     outcome = classify(console, tbcfg)
     if outcome == "ERROR":
         path = log_path(tb, test, run_index, cfg)
@@ -297,8 +307,8 @@ def run_test(tb, test, run_index, cfg, timeout, quiet):
 
     if outcome != "ERROR":
         return outcome, ""
-    if proc.returncode != 0:
-        return "ERROR", f"make exited {proc.returncode}"
+    if returncode != 0:
+        return "ERROR", f"make exited {returncode}"
     return "ERROR", "no verdict banner"
 
 
@@ -334,8 +344,10 @@ def main():
                     help="uvmt config subdirectory under vsim_results (default: default)")
     ap.add_argument("--run-index", type=int, default=0,
                     help="RUN_INDEX subdirectory to use (default: 0)")
-    ap.add_argument("--timeout", type=int, default=600,
-                    help="per-test timeout in seconds (default: 600)")
+    ap.add_argument("--timeout", type=int, default=1800,
+                    help="per-test timeout in seconds (default: 1800; the "
+                         "interrupt-heavy corev-dv templates routinely take "
+                         "10-15 minutes including compile)")
     ap.add_argument("--quiet", action="store_true",
                     help="suppress per-test simulation banner output")
     args = ap.parse_args()
